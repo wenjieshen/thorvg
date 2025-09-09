@@ -24,6 +24,8 @@
 #include "thorvg_lottie.h"
 #include "tvgLottieLoader.h"
 #include "tvgAnimation.h"
+#include <iostream>
+using namespace std;
 
 
 LottieAnimation::LottieAnimation() = default;
@@ -121,6 +123,37 @@ Result LottieAnimation::assign(const char* layer, uint32_t ix, const char* var, 
     }
 
     return Result::NonSupport;
+}
+
+
+// load 이후에 제약 X
+// LottieImage -> prepare() 에서 한번에 처리
+// 메소드 명 변경 : resolve(assetCallback, user_data);
+
+// Accessor 참고
+/**
+     * @brief Set the access function for traversing the Picture scene tree nodes.
+     *
+     * @param[in] paint The paint node to traverse the internal scene-tree.
+     * @param[in] func The callback function calling for every paint nodes of the Picture.
+     * @param[in] data Data passed to the @p func as its argument.
+     *
+     * @note The bitmap based picture might not have the scene-tree.
+     *
+     * @note Experimental API
+     */
+    // Result set(Paint* paint, std::function<bool(const Paint* paint, void* data)> func, void* data) noexcept;
+
+
+Result LottieAnimation::resolve(std::function<bool(Paint* paint, const char* src, void* data)> callback, void* data) noexcept
+{
+    PICTURE(pImpl->picture)->assetResolver = callback;
+    PICTURE(pImpl->picture)->assetResolverData = data;
+
+    // Set the asset resolver callback in the LottieLoader
+    auto loader = PICTURE(pImpl->picture)->loader;
+    if (loader) PICTURE(pImpl->picture)->applyResolverToLoader();
+    return Result::Success;
 }
 
 

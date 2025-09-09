@@ -149,6 +149,17 @@ public:
      */
     Result del(uint32_t id) noexcept;
 
+
+    /**
+     * @brief Sets the asset resolver callback.
+     *
+     * @param[in] resolver The asset resolver callback.
+     * @param[in] data The data to pass to the resolver callback.
+     *
+     * @retval Result::InsufficientCondition If the animation is not loaded.
+     */
+    Result resolve(std::function<bool(Paint* paint, const char* src, void* data)> callback, void* data) noexcept;
+
     /**
      * @brief Creates a new LottieAnimation object.
      *

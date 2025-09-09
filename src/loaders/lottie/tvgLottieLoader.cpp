@@ -26,6 +26,7 @@
 #include "tvgLottieParser.h"
 #include "tvgLottieBuilder.h"
 #include "tvgCompressor.h"
+#include "iostream"
 
 /************************************************************************/
 /* Internal Class Implementation                                        */
@@ -526,5 +527,14 @@ bool LottieLoader::assign(const char* layer, uint32_t ix, const char* var, float
     if (!ready() || !comp->expressions) return false;
     comp->root->assign(layer, ix, var, val);
 
+    return true;
+}
+
+
+bool LottieLoader::resolve(std::function<bool(Paint* paint, const char* src, void* data)> callback, void* data)
+{
+    if (!ready()) return false;
+    comp->assetResolver = callback;
+    comp->assetResolverData = data;
     return true;
 }

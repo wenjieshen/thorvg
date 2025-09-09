@@ -27,6 +27,7 @@
 #include "tvgLottieModel.h"
 #include "tvgLottieBuilder.h"
 #include "tvgLottieExpressions.h"
+#include "iostream" 
 
 
 /************************************************************************/
@@ -888,11 +889,23 @@ void LottieBuilder::updateSolid(LottieLayer* layer)
     layer->scene->push(solidFill);
 }
 
-
-void LottieBuilder::updateImage(LottieGroup* layer)
+// building
+void LottieBuilder::updateImage(LottieComposition* comp, LottieGroup* layer)
 {
     auto image = static_cast<LottieImage*>(layer->children.first());
-    layer->scene->push(image->pooling(true));
+    auto picture = image->pooling(true);
+    layer->scene->push(picture);
+    if (image->loaded) return;
+
+    if (image->data.size > 0) {
+        auto res = picture->load((const char*)image->data.b64Data, image->data.size, image->data.mimeType);
+        image->loaded = res == Result::Success;
+    } else if (comp->assetResolver) {
+        image->loaded = comp->assetResolver(picture, image->data.path, comp->assetResolverData);
+    } else {
+        auto res = picture->load(image->data.path);
+        image->loaded = res == Result::Success;
+    }
 }
 
 
@@ -1392,7 +1405,7 @@ void LottieBuilder::updateLayer(LottieComposition* comp, Scene* scene, LottieLay
             break;
         }
         case LottieLayer::Image: {
-            updateImage(layer);
+            updateImage(comp, layer);
             break;
         }
         case LottieLayer::Text: {

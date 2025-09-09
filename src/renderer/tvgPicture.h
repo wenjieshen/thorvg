@@ -26,6 +26,8 @@
 #include "tvgPaint.h"
 #include "tvgScene.h"
 #include "tvgLoader.h"
+#include "tvgLottieLoader.h"
+#include "iostream"
 
 #define PICTURE(A) static_cast<PictureImpl*>(A)
 #define CONST_PICTURE(A) static_cast<const PictureImpl*>(A)
@@ -67,6 +69,10 @@ struct PictureImpl : Picture
     float w = 0, h = 0;
     bool resizing = false;
 
+    //lottie animation uses
+    std::function<bool(Paint* paint, const char* src, void* data)> assetResolver;
+    void* assetResolverData = nullptr;
+
     PictureImpl() : impl(Paint::Impl(this))
     {
     }
@@ -75,6 +81,12 @@ struct PictureImpl : Picture
     {
         LoaderMgr::retrieve(loader);
         delete(vector);
+    }
+
+    bool applyResolverToLoader() {
+        if (!loader || !assetResolver) return false;
+        static_cast<LottieLoader*>(loader)->resolve(assetResolver, assetResolverData);
+        return true;
     }
 
     bool skip(RenderUpdateFlag flag)
@@ -152,6 +164,7 @@ struct PictureImpl : Picture
             if (invalid) return Result::InvalidArguments;
             return Result::NonSupport;
         }
+        
         return load(loader);
     }
 
@@ -171,7 +184,6 @@ struct PictureImpl : Picture
 
         auto loader = static_cast<ImageLoader*>(LoaderMgr::loader(data, w, h, cs, copy));
         if (!loader) return Result::FailedAllocation;
-
         return load(loader);
     }
 
@@ -303,6 +315,7 @@ struct PictureImpl : Picture
         this->h = loader->h;
 
         impl.mark(RenderUpdateFlag::All);
+        applyResolverToLoader();
 
         return Result::Success;
     }
