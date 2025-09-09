@@ -21,10 +21,12 @@
  */
 
 #include <thorvg.h>
+#include <thorvg_lottie.h>
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include "tvgPicture.h"
 #include "tvgWasmDefaultFont.h"
+#include <iostream>
 
 using namespace emscripten;
 using namespace std;
@@ -236,6 +238,7 @@ struct TvgGLEngine : TvgEngineMethod
 #endif
 
 
+val storedCallback;
 class __attribute__((visibility("default"))) TvgLottieAnimation
 {
 public:
@@ -272,7 +275,7 @@ public:
             return;
         }
 
-        animation = Animation::gen();
+        animation = LottieAnimation::gen();
         if (!animation) errorMsg = "Invalid animation";
     }
 
@@ -318,7 +321,7 @@ public:
         canvas->remove();
 
         delete(animation);
-        animation = Animation::gen();
+        animation = LottieAnimation::gen();
         animation->picture()->origin(0.5f, 0.5f);  //center-aligned
 
         string filetype = mimetype;
@@ -430,6 +433,19 @@ public:
         return false;
     }
 
+    bool setAssetResolver(val callback) {
+        storedCallback = callback;
+        animation->resolve([](tvg::Paint* p, const char* src, void* user_data) {
+            if (storedCallback.isUndefined() || storedCallback.isNull()) return false;
+            val uint8Array = storedCallback(val(src));
+            std::vector<uint8_t> data = vecFromJSArray<uint8_t>(uint8Array);
+
+            static_cast<tvg::Picture*>(p)->load(reinterpret_cast<const char*>(data.data()), data.size(), "png", nullptr, true);
+            return true;
+        }, nullptr);
+        return true;
+    }
+
     bool save2Gif(string data)
     {
 #ifdef THORVG_GIF_SAVER_SUPPORT
@@ -447,7 +463,7 @@ public:
         }
 
         //animation to save
-        auto animation = unique_ptr<Animation>(Animation::gen());
+        auto animation = unique_ptr<LottieAnimation>(LottieAnimation::gen());
         if (!animation) {
             errorMsg = "Invalid animation";
             return false;
@@ -502,7 +518,7 @@ public:
 private:
     string                 errorMsg;
     Canvas*                canvas = nullptr;
-    Animation*             animation = nullptr;
+    LottieAnimation*             animation = nullptr;
     TvgEngineMethod*       engine = nullptr;
     uint32_t               width = 0;
     uint32_t               height = 0;
@@ -550,5 +566,6 @@ EMSCRIPTEN_BINDINGS(thorvg_bindings)
         .function("frame", &TvgLottieAnimation ::frame)
         .function("viewport", &TvgLottieAnimation ::viewport)
         .function("resize", &TvgLottieAnimation ::resize)
+        .function("setAssetResolver", &TvgLottieAnimation ::setAssetResolver)
         .function("save", &TvgLottieAnimation ::save);
 }
