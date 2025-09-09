@@ -21,6 +21,9 @@
  */
 
 #include "Example.h"
+#include <thorvg_lottie.h>
+#include <iostream>
+using namespace std;
 
 /************************************************************************/
 /* ThorVG Drawing Contents                                              */
@@ -28,7 +31,7 @@
 
 struct UserExample : tvgexam::Example
 {
-    unique_ptr<tvg::Animation> animation;
+    unique_ptr<tvg::LottieAnimation> animation;
 
     bool content(tvg::Canvas* canvas, uint32_t w, uint32_t h) override
     {
@@ -36,7 +39,7 @@ struct UserExample : tvgexam::Example
         tvg::Text::load(EXAMPLE_DIR"/font/Arial.ttf");
 
         //Animation Controller
-        animation = unique_ptr<tvg::Animation>(tvg::Animation::gen());
+        animation = std::unique_ptr<tvg::LottieAnimation>(tvg::LottieAnimation::gen());
         auto picture = animation->picture();
         picture->origin(0.5f, 0.5f);  //center origin
 
@@ -47,6 +50,20 @@ struct UserExample : tvgexam::Example
 
         canvas->push(shape);
 
+        if (!tvgexam::verify(animation->resolve([](tvg::Paint* p, const char* src, void* user_data)
+        {
+            
+            ifstream file(TEST_DIR"/test.webp", ios::in | ios::binary);
+            auto size = sizeof(uint32_t) * (1000*1000);
+            auto data = (char*)malloc(size);
+            file.read(data, size);
+            file.close();
+            
+            static_cast<tvg::Picture*>(p)->load(data, size, "webp", nullptr, true);
+            cout << "assetResolver called for " << src << endl;
+            return true;
+        }, nullptr))) return false;
+        cout << "trying picture-load" << endl;
         if (!tvgexam::verify(picture->load(EXAMPLE_DIR"/lottie/sample.json"))) return false;
 
         //image scaling preserving its aspect ratio
