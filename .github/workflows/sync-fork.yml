@@ -1,0 +1,32 @@
+# .github/workflows/sync-fork.yml
+name: Sync fork from upstream
+
+on:
+  schedule:
+    # Runs daily at 03:17 UTC (cron is always UTC).
+    - cron: '17 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # needed to push to your fork with GITHUB_TOKEN
+
+concurrency:
+  group: sync-fork
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.fork == true }}  # only run on forks
+    env:
+      # gh needs a token in GH_TOKEN; reuse the repo's GITHUB_TOKEN
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Sync default branch from upstream into this fork
+        run: |
+          # Example: sync this fork's default branch from its parent (upstream)
+          gh repo sync "${GITHUB_REPOSITORY}"
+      - name: Show result
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" log --oneline -5 || true
