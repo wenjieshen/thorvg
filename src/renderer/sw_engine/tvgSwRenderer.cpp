@@ -787,6 +787,9 @@ bool SwRenderer::render(RenderCompositor* cmp, const RenderEffect* effect, bool 
         TVGERR("SW_ENGINE", "Not supported grayscale Gaussian Blur!");
         return false;
     }
+
+    //TODO: Support grayscale effects.
+    if (p->recoverSfc->channelSize != sizeof(uint32_t)) direct = false;
     
     switch (effect->type) {
         case SceneEffect::GaussianBlur: {
