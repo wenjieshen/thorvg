@@ -61,8 +61,27 @@ const char* GlShaderCache::path(const char* vertSrc, const char* fragSrc)
     if (!home) return nullptr;
 
     #ifdef _WIN32
-    // TODO: windows cache path
-    return nullptr;
+    // Windows: %LOCALAPPDATA%\thorvg\shaders
+    auto appData = getenv("LOCALAPPDATA");
+    if (!appData) {
+        appData = getenv("APPDATA");
+        if (!appData) return nullptr;
+    }
+    snprintf(cacheDir, PATH_MAX, "%s\\thorvg\\shaders", appData);
+
+    auto attribs = GetFileAttributesA(cacheDir);
+    if (attribs == INVALID_FILE_ATTRIBUTES) {
+        char thorvgDir[PATH_MAX];
+        snprintf(thorvgDir, PATH_MAX, "%s\\thorvg", appData);
+
+        if (!CreateDirectoryA(thorvgDir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+            return nullptr;
+        }
+
+        if (!CreateDirectoryA(cacheDir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+            return nullptr;
+        }
+    }
     #elif defined(__ANDROID__)
     // TODO: android cache path
     return nullptr;
