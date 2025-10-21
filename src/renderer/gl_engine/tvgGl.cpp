@@ -152,6 +152,7 @@ static void* _getProcAddress(const char* procName) {
         return false;                                           \
     }
 
+static bool _glProgramBinarySupport = false;
 /************************************************************************/
 /* External Class Implementation                                        */
 /************************************************************************/
@@ -475,6 +476,10 @@ PFNGLUNIFORMBLOCKBINDINGPROC       glUniformBlockBinding;
 //PFNGLGETACTIVEUNIFORMNAMEPROC      glGetActiveUniformName;
 //PFNGLGETACTIVEUNIFORMBLOCKIVPROC   glGetActiveUniformBlockiv;
 //PFNGLGETACTIVEUNIFORMBLOCKNAMEPROC glGetActiveUniformBlockName;
+
+// GL_VERSION_4_1
+PFNGLGETPROGRAMBINARYPROC glGetProgramBinary;
+PFNGLPROGRAMBINARYPROC glProgramBinary;
 
 bool glInit()
 {
@@ -809,6 +814,10 @@ bool glInit()
     // GL_FUNCTION_FETCH(glGetActiveUniformBlockName, PFNGLGETACTIVEUNIFORMBLOCKNAMEPROC);
     GL_FUNCTION_FETCH(glUniformBlockBinding, PFNGLUNIFORMBLOCKBINDINGPROC);
 
+    //TODO: GL_ARB_get_program_binary (optional, may not be available on all platforms)
+    glGetProgramBinary = (PFNGLGETPROGRAMBINARYPROC)_getProcAddress("glGetProgramBinary");
+    glProgramBinary = (PFNGLPROGRAMBINARYPROC)_getProcAddress("glProgramBinary");
+
     //Confirm the version
     GLint vMajor, vMinor;
     glGetIntegerv(GL_MAJOR_VERSION, &vMajor);
@@ -819,6 +828,21 @@ bool glInit()
     }
 
     TVGLOG("GL_ENGINE", "OpenGL/ES version = v%d.%d", vMajor, vMinor);
+
+    // Check if program binary support is available at runtime
+#if defined(THORVG_GL_TARGET_GLES)
+    if (vMajor >= 3) {
+        GL_FUNCTION_FETCH(glGetProgramBinary, PFNGLGETPROGRAMBINARYPROC);
+        GL_FUNCTION_FETCH(glProgramBinary, PFNGLPROGRAMBINARYPROC);
+        glProgramBinarySupportAvailable = true;
+    }
+#else
+    if (vMajor > 4 || (vMajor == 4 && vMinor >= 1)) {
+        GL_FUNCTION_FETCH(glGetProgramBinary, PFNGLGETPROGRAMBINARYPROC);
+        GL_FUNCTION_FETCH(glProgramBinary, PFNGLPROGRAMBINARYPROC);
+        _glProgramBinarySupport = true;
+    }
+#endif
 
     return true;
 };
@@ -833,6 +857,11 @@ bool glTerm()
 #endif
 
     return true;
+}
+
+bool glProgramBinarySupport()
+{
+    return _glProgramBinarySupport;
 }
 
 #endif // __EMSCRIPTEN__
