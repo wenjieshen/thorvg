@@ -47,10 +47,8 @@ const char* GlShaderCache::path(const char* vertSrc, const char* fragSrc)
     auto combinedHash = vertHash ^ (fragHash << 1);
 
     char cacheDir[PATH_MAX];
-    auto home = getenv("HOME");
-    if (!home) return nullptr;
 
-    #ifdef _WIN32
+#ifdef _WIN32
     // Windows: %LOCALAPPDATA%\thorvg\shaders
     auto appData = getenv("LOCALAPPDATA");
     if (!appData) {
@@ -72,14 +70,16 @@ const char* GlShaderCache::path(const char* vertSrc, const char* fragSrc)
             return nullptr;
         }
     }
-    #elif defined(__ANDROID__)
+#elif defined(__ANDROID__)
     // TODO: android cache path
     return nullptr;
-    #elif defined(__linux__)
+#elif defined(__linux__)
     // TODO: linux cache path
     return nullptr;
-    #elif defined(__APPLE__)
+#elif defined(__APPLE__)
     // macOS: ~/Library/Caches/thorvg/shaders
+    auto home = getenv("HOME");
+    if (!home) return nullptr;
     snprintf(cacheDir, PATH_MAX, "%s/Library/Caches/thorvg/shaders", home);
     struct stat st = {0};
     if (stat(cacheDir, &st) == -1) {
@@ -91,21 +91,21 @@ const char* GlShaderCache::path(const char* vertSrc, const char* fragSrc)
         // Create shaders subdirectory
         mkdir(cacheDir, 0755);
     }
-    #else
-    return nullptr;
-    #endif
-
-    // Build full cache file path
-    #ifdef _WIN32
-    snprintf(cachePath, PATH_MAX, "%s\\shader_%08x.bin", cacheDir, combinedHash);
-    #else
-    snprintf(cachePath, PATH_MAX, "%s/shader_%08x.bin", cacheDir, combinedHash);
-    #endif
-
-    return cachePath;
 #else
     return nullptr;
 #endif
+
+    // Build full cache file path
+#ifdef _WIN32
+    snprintf(cachePath, PATH_MAX, "%s\\shader_%08x.bin", cacheDir, combinedHash);
+#else
+    snprintf(cachePath, PATH_MAX, "%s/shader_%08x.bin", cacheDir, combinedHash);
+#endif
+
+    return cachePath;
+#else // THORVG_FILE_IO_SUPPORT || !__EMSCRIPTEN__
+    return nullptr;
+#endif // THORVG_FILE_IO_SUPPORT || !__EMSCRIPTEN__
 }
 
 /************************************************************************/
