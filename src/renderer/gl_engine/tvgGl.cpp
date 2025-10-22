@@ -22,7 +22,6 @@
 
 #include "tvgGl.h"
 #include "tvgCommon.h"
-#include <cstring>
 
 #ifdef __EMSCRIPTEN__
 
@@ -854,19 +853,18 @@ bool glInit()
     // For desktop OpenGL, check if GL_ARB_get_program_binary extension is available
     // This extension is available in OpenGL 3.0+ but we need to check for it explicitly
     if ((vMajor > 4) || (vMajor == 4 && vMinor >= 1)) {
-        // OpenGL 4.1+ has program binary support in core
-        GL_FUNCTION_FETCH(glGetProgramBinary, PFNGLGETPROGRAMBINARYPROC);
-        GL_FUNCTION_FETCH(glProgramBinary, PFNGLPROGRAMBINARYPROC);
         _glProgramBinarySupport = true;
         TVGLOG("GL_ENGINE", "Program binary support enabled (OpenGL 4.1+ core)");
     } else if (vMajor >= 3 && _isExtensionSupported("GL_ARB_get_program_binary")) {
-        // OpenGL 3.0+ with GL_ARB_get_program_binary extension
-        GL_FUNCTION_FETCH(glGetProgramBinary, PFNGLGETPROGRAMBINARYPROC);
-        GL_FUNCTION_FETCH(glProgramBinary, PFNGLPROGRAMBINARYPROC);
         _glProgramBinarySupport = true;
         TVGLOG("GL_ENGINE", "Program binary support enabled (GL_ARB_get_program_binary extension)");
     } else {
         TVGLOG("GL_ENGINE", "Program binary support not available");
+    }
+
+    if (_glProgramBinarySupport) {
+        GL_FUNCTION_FETCH(glGetProgramBinary, PFNGLGETPROGRAMBINARYPROC);
+        GL_FUNCTION_FETCH(glProgramBinary, PFNGLPROGRAMBINARYPROC);
     }
 #endif
 
