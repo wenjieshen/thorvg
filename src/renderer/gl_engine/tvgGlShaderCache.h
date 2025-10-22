@@ -30,7 +30,6 @@ struct GlShaderCache
     static void write(uint32_t programId, const char* vertSrc, const char* fragSrc);
     static uint32_t read(const char* vertSrc, const char* fragSrc);
     static const char* path(const char* vertSrc, const char* fragSrc);
-    static uint32_t hash(const char* str);
 };
 
 #endif /* _TVG_GL_SHADER_CACHE_H_ */

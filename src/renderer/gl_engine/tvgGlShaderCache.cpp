@@ -21,6 +21,7 @@
  */
 
 #include "tvgGlShaderCache.h"
+#include "tvgCompressor.h"
 
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -37,23 +38,12 @@
 
 static char cachePath[PATH_MAX];
 
-uint32_t GlShaderCache::hash(const char* str)
-{
-    // Simple FNV-1a hash
-    uint32_t hash = 2166136261u;
-    while (*str) {
-        hash ^= static_cast<uint32_t>(*str++);
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
 const char* GlShaderCache::path(const char* vertSrc, const char* fragSrc)
 {
 #if defined(THORVG_FILE_IO_SUPPORT) && !defined(__EMSCRIPTEN__)
     // Compute hash from shader sources
-    auto vertHash = hash(vertSrc);
-    auto fragHash = hash(fragSrc);
+    auto vertHash = djb2Encode(vertSrc);
+    auto fragHash = djb2Encode(fragSrc);
     auto combinedHash = vertHash ^ (fragHash << 1);
 
     char cacheDir[PATH_MAX];
@@ -129,7 +119,6 @@ uint32_t GlShaderCache::read(const char* vertSrc, const char* fragSrc)
 #if defined(THORVG_FILE_IO_SUPPORT) && !defined(__EMSCRIPTEN__)
 
     if (!glProgramBinarySupport()) {
-        TVGLOG("GL_ENGINE", "Program binary support not available, skipping cache read");
         return 0;
     }
 
@@ -168,7 +157,7 @@ uint32_t GlShaderCache::read(const char* vertSrc, const char* fragSrc)
     // Load program binary to shader
     uint32_t progObj = glCreateProgram();
     if (!progObj) {
-        TVGLOG("GL_ENGINE", "Failed to create program object");
+        TVGLOG("GL_ENGINE", "Failed to load cached shader program object");
         tvg::free(binaryData);
         return 0;
     }
@@ -199,7 +188,6 @@ void GlShaderCache::write(uint32_t programId, const char* vertSrc, const char* f
 #if defined(THORVG_FILE_IO_SUPPORT) && !defined(__EMSCRIPTEN__)
 
     if (!glProgramBinarySupport()) {
-        TVGLOG("GL_ENGINE", "Program binary support not available");
         return;
     }
 
@@ -209,7 +197,7 @@ void GlShaderCache::write(uint32_t programId, const char* vertSrc, const char* f
     GLint numFormats = 0;
     glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &numFormats);
     if (numFormats < 1) {
-        TVGLOG("GL_ENGINE", "Program binary not supported");
+        TVGLOG("GL_ENGINE", "This GPU does not support any program binary formats");
         return;
     }
 
