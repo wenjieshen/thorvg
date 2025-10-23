@@ -22,6 +22,8 @@
 
 #include "tvgGlShaderCache.h"
 #include "tvgCompressor.h"
+#include <chrono>
+#include <fstream>
 
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
@@ -147,6 +149,8 @@ uint32_t GlShaderCache::read(const char* vertSrc, const char* fragSrc)
         return 0;
     }
 
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     // Read from cache if exists
     auto cachePath = path(vertSrc, fragSrc);
     if (!cachePath) return 0;
@@ -199,6 +203,13 @@ uint32_t GlShaderCache::read(const char* vertSrc, const char* fragSrc)
         return 0;
     }
 
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
+
+    std::ofstream timingFile("cache_read_time.txt", std::ios::app);
+    timingFile << duration << " us\n";
+    timingFile.close();
+
     TVGLOG("GL_ENGINE", "Shader cache loaded: %s (%d bytes)", cachePath, length);
     return progObj;
 #else
@@ -211,6 +222,8 @@ void GlShaderCache::write(uint32_t programId, const char* vertSrc, const char* f
     if (!programId || !vertSrc || !fragSrc) return;
 
 #if defined(THORVG_FILE_IO_SUPPORT) && !defined(__EMSCRIPTEN__)
+
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     if (!glProgramBinarySupport()) {
         return;
@@ -263,6 +276,13 @@ void GlShaderCache::write(uint32_t programId, const char* vertSrc, const char* f
     fclose(file);
 
     auto success = (written == static_cast<size_t>(length));
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
+
+    std::ofstream timingFile("cache_write_time.txt", std::ios::app);
+    timingFile << duration << " us\n";
+    timingFile.close();
 
     if (success) TVGLOG("GL_ENGINE", "Shader cache written: %s (%d bytes)", cachePath, length);
     else TVGLOG("GL_ENGINE", "Failed to write shader cache: %s", cachePath);

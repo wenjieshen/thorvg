@@ -22,6 +22,8 @@
 
 #include "tvgGlProgram.h"
 #include "tvgGlShaderCache.h"
+#include <chrono>
+#include <fstream>
 
 /************************************************************************/
 /* Internal Class Implementation                                        */
@@ -45,6 +47,8 @@ GlProgram::GlProgram(const char* vertSrc, const char* fragSrc)
     }
 #endif
 
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     auto shader = GlShader(vertSrc, fragSrc);
 
     // Create the program object
@@ -60,6 +64,14 @@ GlProgram::GlProgram(const char* vertSrc, const char* fragSrc)
     // Check the link status
     GLint linked;
     glGetProgramiv(progObj, GL_LINK_STATUS, &linked);
+
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
+
+    std::ofstream timingFile("shader_create_time.txt", std::ios::app);
+    timingFile << duration << " us\n";
+    timingFile.close();
 
     if (!linked) {
         GLint infoLen = 0;
