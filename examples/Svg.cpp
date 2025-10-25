@@ -26,8 +26,8 @@
 /* ThorVG Drawing Contents                                              */
 /************************************************************************/
 
-#define NUM_PER_ROW 9
-#define NUM_PER_COL 9
+#define NUM_PER_ROW 1
+#define NUM_PER_COL 1
 
 struct UserExample : tvgexam::Example
 {
@@ -42,8 +42,8 @@ struct UserExample : tvgexam::Example
         if (counter >= NUM_PER_ROW * NUM_PER_COL) return;
 
         //ignore if not svg.
-        const char *ext = path + strlen(path) - 3;
-        if (strcmp(ext, "svg")) return;
+        const char *ext = path + strlen(path) - 8;
+        if (strcmp(ext, "2009.svg")) return;
 
         auto picture = tvg::Picture::gen();
         picture->origin(0.5f, 0.5f);
@@ -53,14 +53,21 @@ struct UserExample : tvgexam::Example
         //image scaling preserving its aspect ratio
         float w, h;
         picture->size(&w, &h);
-        picture->scale((w > h) ? size / w : size / h);
-        picture->translate((counter % NUM_PER_ROW) * size + size / 2, (counter / NUM_PER_ROW) * (this->h / NUM_PER_COL) + size / 2);
+        // picture->scale((w > h) ? size / w : size / h);
+        picture->translate((counter % NUM_PER_ROW) * w + w / 2, (counter / NUM_PER_ROW) * (this->h / NUM_PER_COL) + h / 2);
 
         pictures.push_back(picture);
 
         cout << "SVG: " << path << endl;
 
         counter++;
+    }
+
+    bool update(tvg::Canvas* canvas, uint32_t elapsed) override
+    {
+        canvas->update();
+
+        return true;
     }
 
     bool content(tvg::Canvas* canvas, uint32_t w, uint32_t h) override
