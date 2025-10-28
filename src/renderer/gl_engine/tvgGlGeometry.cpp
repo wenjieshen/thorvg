@@ -279,3 +279,74 @@ RenderRegion GlGeometry::getBounds() const
     return this->bounds;
 
 }
+
+
+void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
+{
+    out.cmds.reserve(in.cmds.count);
+    out.pts.reserve(in.pts.count);
+
+    auto cmds = in.cmds.data;
+    auto cmdCnt = in.cmds.count;
+    auto pts = in.pts.data;
+
+    uint32_t prevPtIdx = 0;
+    uint32_t prevPrevPtIdx = 0;
+    auto hasPrevPrev = false;
+
+    for (uint32_t i = 0; i < cmdCnt; i++) {
+        switch (cmds[i]) {
+            case PathCommand::MoveTo: {
+                out.cmds.push(PathCommand::MoveTo);
+                out.pts.push(*pts);
+                prevPtIdx = out.pts.count - 1;
+                hasPrevPrev = false;
+                pts++;
+                break;
+            }
+            case PathCommand::LineTo: {
+                if (tvg::zero((*pts) * matrix - out.pts[prevPtIdx] * matrix)) break;
+
+                if (hasPrevPrev && out.cmds.count >= 2 && out.cmds.last() == PathCommand::LineTo) {
+                    auto& p1 = out.pts[prevPrevPtIdx];
+                    auto& p2 = out.pts[prevPtIdx];
+                    auto& p3 = *pts;
+                    if (tvg::zero(tvg::cross(p2 - p1, p3 - p1))) {
+                        out.pts[prevPtIdx] = p3;
+                        pts++;
+                        break;
+                    }
+                }
+
+                out.cmds.push(PathCommand::LineTo);
+                out.pts.push(*pts);
+                prevPrevPtIdx = prevPtIdx;
+                prevPtIdx = out.pts.count - 1;
+                hasPrevPrev = true;
+
+                pts++;
+                break;
+            }
+            case PathCommand::CubicTo: {
+                if (tvg::zero(pts[2] - out.pts[prevPtIdx])) break;
+                out.cmds.push(PathCommand::CubicTo);
+                out.pts.push(pts[0]);
+                out.pts.push(pts[1]);
+                out.pts.push(pts[2]);
+                prevPrevPtIdx = prevPtIdx;
+                prevPtIdx = out.pts.count - 1;
+                hasPrevPrev = true;
+
+                pts += 3;
+                break;
+            }
+            case PathCommand::Close: {
+                out.cmds.push(PathCommand::Close);
+                hasPrevPrev = false;
+                break;
+            }
+            default:
+                break;
+            }
+    }
+}

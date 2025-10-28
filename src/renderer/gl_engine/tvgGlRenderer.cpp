@@ -1252,13 +1252,19 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     sdata->geometry.matrix = transform;
     sdata->geometry.viewport = vport;
 
+    RenderPath optimizedPath;
+    sdata->geometry.optimizePath(rshape.path, optimizedPath);
     //TODO: Please precisely update tessellation not to update only if the color is changed.
     if (flags & (RenderUpdateFlag::Color | RenderUpdateFlag::Gradient | RenderUpdateFlag::Transform | RenderUpdateFlag::Path)) {
-        if (sdata->geometry.tesselateShape(rshape)) sdata->validFill = true;
+        if (optimizedPath.pts.count > 2) { // Can be a polygon
+            if (sdata->geometry.tesselateShape(rshape)) sdata->validFill = true;
+        }
     }
 
     //TODO: Please precisely update tessellation not to update only if the color is changed.
     if (flags & (RenderUpdateFlag::Color | RenderUpdateFlag::Stroke | RenderUpdateFlag::GradientStroke | RenderUpdateFlag::Transform | RenderUpdateFlag::Path)) {
+        if (sdata->geometry.tesselateStroke(rshape)) sdata->validStroke = true;
+    } else if (optimizedPath.pts.count == 2) { // Degenerate case: 2 points only
         if (sdata->geometry.tesselateStroke(rshape)) sdata->validStroke = true;
     }
 

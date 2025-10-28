@@ -89,6 +89,13 @@ private:
     BBox bbox = {};
 };
 
+/**
+ * Removes degenerate vertices from a path by merging too-close vertices.
+ * Returns a cleaned path with merged vertices.
+ * If the result has only 2 vertices, it should be treated as a stroke.
+ */
+bool removeDegenerateVertices(const RenderPath& in, RenderPath& out);
+
 }  // namespace tvg
 
 #endif /* _TVG_GL_TESSELLATOR_H_ */
