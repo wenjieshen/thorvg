@@ -24,12 +24,30 @@
 #define _TVG_GL_SHADER_CACHE_H_
 
 #include "tvgGlCommon.h"
+#include <unordered_map>
+#include <vector>
+
+struct ShaderBinaryData {
+    GLenum binaryFormat;
+    GLsizei length;
+    GLubyte* data;
+};
 
 struct GlShaderCache
 {
     static void write(uint32_t progObj, const char* vertSrc, const char* fragSrc);
     static uint32_t read(const char* vertSrc, const char* fragSrc);
     static bool path(const char* vertSrc, const char* fragSrc, char* outPath, size_t outPathSize);
+
+    std::unordered_map<unsigned long, ShaderBinaryData> cache;
+    bool loaded = false;
+    bool dirty = false;
+
+    bool load();
+    bool flush();
+    bool fetchEntry(unsigned long entryHash, GLenum* binaryFormat, GLsizei* length, GLubyte** binaryData);
+    bool writeEntry(unsigned long entryHash, GLenum binaryFormat, GLsizei length, const GLubyte* binaryData);
+    void clear();
 };
 
 #endif /* _TVG_GL_SHADER_CACHE_H_ */

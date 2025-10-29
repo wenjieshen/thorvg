@@ -23,6 +23,8 @@
 #include "tvgGlShaderCache.h"
 #include "tvgCompressor.h"
 #include "tvgEnv.h"
+#include "tvgAllocator.h"
+#include <vector>
 
 #ifdef _WIN32
     #ifndef PATH_MAX
@@ -31,6 +33,26 @@
 #else
     #include <limits.h>
 #endif
+
+#define SHADER_CACHE_MAGIC 0x54565348
+#define SHADER_CACHE_VERSION 1
+
+struct ShaderCacheHeader {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t entryCount;
+};
+
+struct ShaderCacheEntry {
+    unsigned long entryHash;
+    uint32_t offset;
+    uint32_t length;
+};
+
+struct ShaderCacheData {
+    std::vector<ShaderCacheEntry> entries;
+    std::vector<uint8_t> blobData;
+};
 
 
 bool GlShaderCache::path(const char* vertSrc, const char* fragSrc, char* outPath, size_t outPathSize)
@@ -169,4 +191,167 @@ void GlShaderCache::write(uint32_t progObj, const char* vertSrc, const char* fra
     else TVGLOG("GL_ENGINE", "Failed to write shader cache: %s", cachePath);
 
     tvg::free(binaryData);
+}
+
+bool GlShaderCache::load()
+{
+#if !defined(THORVG_FILE_IO_SUPPORT) || defined(__EMSCRIPTEN__)
+    return false;
+#endif
+    if (loaded) return true;
+
+    char cacheDir[PATH_MAX];
+    if (!tvg::cachedir(cacheDir, PATH_MAX)) return false;
+
+    char cachePath[PATH_MAX];
+#ifdef _WIN32
+    snprintf(cachePath, PATH_MAX, "%s\\shader_cache.bin", cacheDir);
+#else
+    snprintf(cachePath, PATH_MAX, "%s/shader_cache.bin", cacheDir);
+#endif
+
+    auto file = fopen(cachePath, "rb");
+    if (!file) {
+        loaded = true;
+        return true;
+    }
+
+    ShaderCacheHeader header;
+    if (fread(&header, sizeof(ShaderCacheHeader), 1, file) != 1 ||
+        header.magic != SHADER_CACHE_MAGIC || header.version != SHADER_CACHE_VERSION) {
+        fclose(file);
+        loaded = true;
+        return true;
+    }
+
+    std::vector<ShaderCacheEntry> entries(header.entryCount);
+    if (fread(entries.data(), sizeof(ShaderCacheEntry), header.entryCount, file) != header.entryCount) {
+        fclose(file);
+        loaded = true;
+        return true;
+    }
+
+    for (const auto& entry : entries) {
+        ShaderBinaryData data;
+        if (fread(&data.binaryFormat, sizeof(GLenum), 1, file) != 1 ||
+            fread(&data.length, sizeof(GLsizei), 1, file) != 1) {
+            break;
+        }
+
+        data.data = tvg::malloc<GLubyte*>(data.length);
+        if (fread(data.data, 1, data.length, file) != static_cast<size_t>(data.length)) {
+            tvg::free(data.data);
+            break;
+        }
+
+        cache[entry.entryHash] = data;
+    }
+
+    fclose(file);
+    loaded = true;
+    return true;
+}
+
+bool GlShaderCache::flush()
+{
+#if !defined(THORVG_FILE_IO_SUPPORT) || defined(__EMSCRIPTEN__)
+    return false;
+#endif
+    if (!dirty || cache.empty()) return true;
+
+    char cacheDir[PATH_MAX];
+    if (!tvg::cachedir(cacheDir, PATH_MAX)) return false;
+
+    char cachePath[PATH_MAX];
+#ifdef _WIN32
+    snprintf(cachePath, PATH_MAX, "%s\\shader_cache.bin", cacheDir);
+#else
+    snprintf(cachePath, PATH_MAX, "%s/shader_cache.bin", cacheDir);
+#endif
+
+    auto file = fopen(cachePath, "wb");
+    if (!file) return false;
+
+    ShaderCacheHeader header;
+    header.magic = SHADER_CACHE_MAGIC;
+    header.version = SHADER_CACHE_VERSION;
+    header.entryCount = cache.size();
+
+    fwrite(&header, sizeof(ShaderCacheHeader), 1, file);
+
+    std::vector<ShaderCacheEntry> entries;
+    uint32_t offset = 0;
+    for (const auto& pair : cache) {
+        ShaderCacheEntry entry;
+        entry.entryHash = pair.first;
+        entry.offset = offset;
+        entry.length = sizeof(GLenum) + sizeof(GLsizei) + pair.second.length;
+        entries.push_back(entry);
+        offset += entry.length;
+    }
+
+    fwrite(entries.data(), sizeof(ShaderCacheEntry), entries.size(), file);
+
+    for (const auto& pair : cache) {
+        fwrite(&pair.second.binaryFormat, sizeof(GLenum), 1, file);
+        fwrite(&pair.second.length, sizeof(GLsizei), 1, file);
+        fwrite(pair.second.data, 1, pair.second.length, file);
+    }
+
+    fclose(file);
+    dirty = false;
+    return true;
+}
+
+bool GlShaderCache::fetchEntry(unsigned long entryHash, GLenum* binaryFormat, GLsizei* length, GLubyte** binaryData)
+{
+#if !defined(THORVG_FILE_IO_SUPPORT) || defined(__EMSCRIPTEN__)
+    return false;
+#endif
+    if (!binaryFormat || !length || !binaryData) return false;
+
+    if (!loaded) load();
+
+    auto it = cache.find(entryHash);
+    if (it == cache.end()) return false;
+
+    *binaryFormat = it->second.binaryFormat;
+    *length = it->second.length;
+    *binaryData = tvg::malloc<GLubyte*>(it->second.length);
+    memcpy(*binaryData, it->second.data, it->second.length);
+
+    return true;
+}
+
+bool GlShaderCache::writeEntry(unsigned long entryHash, GLenum binaryFormat, GLsizei length, const GLubyte* binaryData)
+{
+#if !defined(THORVG_FILE_IO_SUPPORT) || defined(__EMSCRIPTEN__)
+    return false;
+#endif
+    if (!binaryData || length <= 0) return false;
+
+    if (!loaded) load();
+
+    if (cache.find(entryHash) != cache.end()) return true;
+
+    ShaderBinaryData data;
+    data.binaryFormat = binaryFormat;
+    data.length = length;
+    data.data = tvg::malloc<GLubyte*>(length);
+    memcpy(data.data, binaryData, length);
+
+    cache[entryHash] = data;
+    dirty = true;
+
+    return true;
+}
+
+void GlShaderCache::clear()
+{
+    for (auto& pair : cache) {
+        tvg::free(pair.second.data);
+    }
+    cache.clear();
+    loaded = false;
+    dirty = false;
 }
