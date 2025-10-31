@@ -292,6 +292,7 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
 
     uint32_t prevPtIdx = 0;
     uint32_t prevPrevPtIdx = 0;
+    uint32_t startPtIdx = 0;
     auto hasPrevPrev = false;
 
     for (uint32_t i = 0; i < cmdCnt; i++) {
@@ -300,24 +301,16 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 out.cmds.push(PathCommand::MoveTo);
                 out.pts.push(*pts);
                 prevPtIdx = out.pts.count - 1;
+                startPtIdx = prevPtIdx;
                 hasPrevPrev = false;
                 pts++;
                 break;
             }
             case PathCommand::LineTo: {
-                if (tvg::zero((*pts) * matrix - out.pts[prevPtIdx] * matrix)) break;
-
-                if (hasPrevPrev && out.cmds.count >= 2 && out.cmds.last() == PathCommand::LineTo) {
-                    auto& p1 = out.pts[prevPrevPtIdx];
-                    auto& p2 = out.pts[prevPtIdx];
-                    auto& p3 = *pts;
-                    if (tvg::zero(tvg::cross(p2 - p1, p3 - p1))) {
-                        out.pts[prevPtIdx] = p3;
-                        pts++;
-                        break;
-                    }
+                if (tvg::gl::shouldMerge(*pts * matrix, out.pts[prevPtIdx] * matrix)) {
+                    pts++;
+                    break;
                 }
-
                 out.cmds.push(PathCommand::LineTo);
                 out.pts.push(*pts);
                 prevPrevPtIdx = prevPtIdx;
@@ -328,7 +321,11 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 break;
             }
             case PathCommand::CubicTo: {
-                if (tvg::zero(pts[2] - out.pts[prevPtIdx])) break;
+                if (tvg::gl::shouldMerge(pts[2] * matrix, out.pts[prevPtIdx] * matrix)) {
+                    pts += 3;
+                    break;
+                }
+                
                 out.cmds.push(PathCommand::CubicTo);
                 out.pts.push(pts[0]);
                 out.pts.push(pts[1]);
@@ -341,6 +338,10 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 break;
             }
             case PathCommand::Close: {
+                if (tvg::gl::shouldMerge(out.pts[prevPtIdx] * matrix,out.pts[startPtIdx] * matrix)) {
+                    out.pts.pop();
+                    out.cmds.pop();
+                }
                 out.cmds.push(PathCommand::Close);
                 hasPrevPrev = false;
                 break;
@@ -348,5 +349,21 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
             default:
                 break;
             }
+    }
+
+   
+
+    if (out.pts.count > 2) {
+        bool hasCubic = false;
+        for (uint32_t i = 0; i < out.cmds.count; ++i) {
+
+            if (out.cmds[i] == PathCommand::CubicTo) {
+                hasCubic = true;
+                break;
+            }
+        }
+        if (!hasCubic) {
+            TVGLOG("GL_ENGINE", "Polygon has no cubic");
+        }
     }
 }

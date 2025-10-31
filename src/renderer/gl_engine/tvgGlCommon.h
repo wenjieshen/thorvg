@@ -177,4 +177,14 @@ struct GlCompositor : RenderCompositor
 };
 
 
+namespace tvg {
+    namespace gl { // Only be needed in Gl Engine
+        constexpr float GL_PIXEL_TOLERANCE = 0.25f;
+        inline bool shouldMerge(const Point& p1, const Point& p2){
+            float dx = p1.x - p2.x;
+            float dy = p1.y - p2.y;
+            return (dx * dx + dy * dy) < (GL_PIXEL_TOLERANCE * GL_PIXEL_TOLERANCE);
+        }
+    }
+}
 #endif /* _TVG_GL_COMMON_H_ */
