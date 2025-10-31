@@ -449,7 +449,7 @@ PFNGLGENVERTEXARRAYSPROC                     glGenVertexArrays;
 //PFNGLCLEARBUFFERFIPROC                       glClearBufferfi;
 //PFNGLGETSTRINGIPROC                          glGetStringi;
 //PFNGLISRENDERBUFFERPROC                      glIsRenderbuffer;
-PFNGLRENDERBUFFERSTORAGEPROC                 glRenderbufferStorage;
+//PFNGLRENDERBUFFERSTORAGEPROC                 glRenderbufferStorage;
 //PFNGLGETRENDERBUFFERPARAMETERIVPROC          glGetRenderbufferParameteriv;
 //PFNGLISFRAMEBUFFERPROC                       glIsFramebuffer;
 //PFNGLCHECKFRAMEBUFFERSTATUSPROC              glCheckFramebufferStatus;
@@ -769,7 +769,7 @@ bool glInit()
     GL_FUNCTION_FETCH(glBindRenderbuffer, PFNGLBINDRENDERBUFFERPROC);
     GL_FUNCTION_FETCH(glDeleteRenderbuffers, PFNGLDELETERENDERBUFFERSPROC);
     GL_FUNCTION_FETCH(glGenRenderbuffers, PFNGLGENRENDERBUFFERSPROC);
-    GL_FUNCTION_FETCH(glRenderbufferStorage, PFNGLRENDERBUFFERSTORAGEPROC);
+    // GL_FUNCTION_FETCH(glRenderbufferStorage, PFNGLRENDERBUFFERSTORAGEPROC);
     // GL_FUNCTION_FETCH(glGetRenderbufferParameteriv, PFNGLGETRENDERBUFFERPARAMETERIVPROC);
     // GL_FUNCTION_FETCH(glIsFramebuffer, PFNGLISFRAMEBUFFERPROC);
 #if defined(THORVG_GL_TARGET_GLES)
