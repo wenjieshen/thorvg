@@ -24,6 +24,8 @@
 #include "tvgGlGpuBuffer.h"
 #include "tvgGlTessellator.h"
 #include "tvgGlRenderTask.h"
+#include <string>
+
 
 bool GlIntersector::isPointInTriangle(const Point& p, const Point& a, const Point& b, const Point& c)
 {
@@ -383,16 +385,29 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
    
 
     if (out.pts.count > 2) {
-        bool hasCubic = false;
+        string svgPath = "";
+        uint32_t ptIdx = 0;
         for (uint32_t i = 0; i < out.cmds.count; ++i) {
-
-            if (out.cmds[i] == PathCommand::CubicTo) {
-                hasCubic = true;
-                break;
+            switch (out.cmds[i]) {
+                case PathCommand::MoveTo:
+                    svgPath += "M" + to_string(out.pts[ptIdx].x) + "," + to_string(out.pts[ptIdx].y);
+                    ptIdx++;
+                    break;
+                case PathCommand::LineTo:
+                    svgPath += "L" + to_string(out.pts[ptIdx].x) + "," + to_string(out.pts[ptIdx].y);
+                    ptIdx++;
+                    break;
+                case PathCommand::CubicTo:
+                    svgPath += "C" + to_string(out.pts[ptIdx].x) + "," + to_string(out.pts[ptIdx].y) + " " +
+                              to_string(out.pts[ptIdx+1].x) + "," + to_string(out.pts[ptIdx+1].y) + " " +
+                              to_string(out.pts[ptIdx+2].x) + "," + to_string(out.pts[ptIdx+2].y);
+                    ptIdx += 3;
+                    break;
+                case PathCommand::Close:
+                    svgPath += "Z";
+                    break;
             }
         }
-        if (!hasCubic) {
-            TVGLOG("GL_ENGINE", "Polygon has no cubic");
-        }
+        printf("SVG Path: %s\n", svgPath.c_str());
     }
 }
