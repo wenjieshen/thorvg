@@ -186,7 +186,7 @@ namespace tvg {
             return (dx * dx + dy * dy) < (GL_PIXEL_TOLERANCE * GL_PIXEL_TOLERANCE);
         }
 
-        inline void checkPointToLine(const Point& p, const Point& p0, const Point& v, float vv, float& maxDist, float& minT, float& maxT) {
+        inline void checkPointToLine(const Point& p, const Point& p0, const Point& v,const float vv, float& maxDist, float& minT, float& maxT) {
             Point w = p - p0;
             float area = cross(v, w);
             float dist = fabsf(area) / std::sqrtf(vv);

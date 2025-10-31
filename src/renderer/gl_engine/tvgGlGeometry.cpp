@@ -296,7 +296,37 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
     uint32_t prevPrevPtIdx = 0;
     uint32_t startPtIdx = 0;
     auto hasPrevPrev = false;
-
+    if (in.pts.count > 1) {
+        string svgPath = "";
+        uint32_t ptIdx = 0;
+        for (uint32_t i = 0; i < in.cmds.count; ++i) {
+            switch (in.cmds[i]) {
+            case PathCommand::MoveTo:
+                svgPath += "M" + to_string(in.pts[ptIdx].x) + "," +
+                           to_string(in.pts[ptIdx].y);
+                ptIdx++;
+                break;
+            case PathCommand::LineTo:
+                svgPath += "L" + to_string(in.pts[ptIdx].x) + "," +
+                           to_string(in.pts[ptIdx].y);
+                ptIdx++;
+                break;
+            case PathCommand::CubicTo:
+                svgPath += "C" + to_string(in.pts[ptIdx].x) + "," +
+                           to_string(in.pts[ptIdx].y) + " " +
+                           to_string(in.pts[ptIdx + 1].x) + "," +
+                           to_string(in.pts[ptIdx + 1].y) + " " +
+                           to_string(in.pts[ptIdx + 2].x) + "," +
+                           to_string(in.pts[ptIdx + 2].y);
+                ptIdx += 3;
+                break;
+            case PathCommand::Close:
+                svgPath += "Z";
+                break;
+            }
+        }
+        printf("SVG Path input: %s\n", svgPath.c_str());
+    }
     for (uint32_t i = 0; i < cmdCnt; i++) {
         switch (cmds[i]) {
             case PathCommand::MoveTo: {
@@ -309,15 +339,47 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 break;
             }
             case PathCommand::LineTo: {
-                if (tvg::gl::shouldMerge(*pts * matrix, out.pts[prevPtIdx] * matrix)) {
+                auto p0 = out.pts[prevPtIdx] * matrix;
+                auto p1 = (*pts) * matrix;
+                if (tvg::gl::shouldMerge(p0, p1)) {
                     pts++;
                     break;
                 }
-                out.cmds.push(PathCommand::LineTo);
-                out.pts.push(*pts);
-                prevPrevPtIdx = prevPtIdx;
-                prevPtIdx = out.pts.count - 1;
-                hasPrevPrev = true;
+    
+                if (out.pts.count > 1) {
+                    auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
+                    auto v = p0 - prevPrevPt;
+                    auto vv = v.x * v.x + v.y * v.y;
+
+                    float minT = 1e9f;
+                    float maxT = -1e9f;
+                    float maxDist = 0.0f;
+                    tvg::gl::checkPointToLine(p1, prevPrevPt, v, vv, maxDist, minT, maxT);
+                    if (maxDist <= 0.5f) {
+                        if (minT < -0.25f) {
+                            out.pts.pop();
+                            out.pts.push(*pts);
+                        } else if (maxT > 1.0f + 0.25f) {
+                            out.pts.pop();
+                            out.pts.pop();
+                            out.pts.push(out.pts[prevPrevPtIdx]);
+                            out.pts.push(*pts);
+                        }
+                    }else {
+                        out.cmds.push(PathCommand::LineTo);
+                        out.pts.push(*pts);
+                        prevPrevPtIdx = prevPtIdx;
+                        prevPtIdx = out.pts.count - 1;
+                        hasPrevPrev = true;
+                    }
+                } else {
+                    out.cmds.push(PathCommand::LineTo);
+                    out.pts.push(*pts);
+                    prevPrevPtIdx = prevPtIdx;
+                    prevPtIdx = out.pts.count - 1;
+                    hasPrevPrev = true;
+                }
+
 
                 pts++;
                 break;
@@ -344,21 +406,21 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 bool inSpan = (minT >= -0.25f) && (maxT <= 1.0f + 0.25f);
                 if (flatEnough && inSpan) {
                     if (out.pts.count > 1){
-                        maxDist = 0.0f;
-                        minT = 1e9f;
-                        maxT = -1e9f;
+                        auto maxDist = 0.0f;
+                        auto minT = 1e9f;
+                        auto maxT = -1e9f;
                         auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
-                        v = p0 - prevPrevPt;
-                        vv = v.x * v.x + v.y * v.y;
-                        tvg::gl::checkPointToLine(p3, p0, v, vv, maxDist, minT, maxT);
+                        auto v = p0 - prevPrevPt;
+                        auto vv = v.x * v.x + v.y * v.y;
+                        tvg::gl::checkPointToLine(p3, prevPrevPt, v, vv, maxDist, minT, maxT);
                         if (maxDist <= 0.5f) {
                             if (minT < -0.25f) {
                                 out.pts.pop();
+                                out.pts.pop();
                                 out.pts.push(pts[2]);
+                                out.pts.push(out.pts[prevPrevPtIdx]);
                             } else if (maxT > 1.0f + 0.25f) {
                                 out.pts.pop();
-                                out.pts.pop();
-                                out.pts.push(out.pts[prevPrevPtIdx]);
                                 out.pts.push(pts[2]);
                             }
                         } else {
@@ -368,16 +430,20 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                     } else {
                         out.cmds.push(PathCommand::LineTo);
                         out.pts.push(pts[2]);
+                        prevPrevPtIdx = prevPtIdx;
+                        prevPtIdx = out.pts.count - 1;
+                        hasPrevPrev = true;
                     }
                 } else {
                     out.cmds.push(PathCommand::CubicTo);
                     out.pts.push(pts[0]);
                     out.pts.push(pts[1]);
                     out.pts.push(pts[2]);
+                    prevPrevPtIdx = prevPtIdx;
+                    prevPtIdx = out.pts.count - 1;
+                    hasPrevPrev = true;
                 }
-                prevPrevPtIdx = prevPtIdx;
-                prevPtIdx = out.pts.count - 1;
-                hasPrevPrev = true;
+               
                 pts += 3;
                 break;
             }
