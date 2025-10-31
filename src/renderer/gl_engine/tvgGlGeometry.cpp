@@ -296,37 +296,6 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
     uint32_t prevPrevPtIdx = 0;
     uint32_t startPtIdx = 0;
     auto hasPrevPrev = false;
-    if (in.pts.count > 1) {
-        string svgPath = "";
-        uint32_t ptIdx = 0;
-        for (uint32_t i = 0; i < in.cmds.count; ++i) {
-            switch (in.cmds[i]) {
-            case PathCommand::MoveTo:
-                svgPath += "M" + to_string(in.pts[ptIdx].x) + "," +
-                           to_string(in.pts[ptIdx].y);
-                ptIdx++;
-                break;
-            case PathCommand::LineTo:
-                svgPath += "L" + to_string(in.pts[ptIdx].x) + "," +
-                           to_string(in.pts[ptIdx].y);
-                ptIdx++;
-                break;
-            case PathCommand::CubicTo:
-                svgPath += "C" + to_string(in.pts[ptIdx].x) + "," +
-                           to_string(in.pts[ptIdx].y) + " " +
-                           to_string(in.pts[ptIdx + 1].x) + "," +
-                           to_string(in.pts[ptIdx + 1].y) + " " +
-                           to_string(in.pts[ptIdx + 2].x) + "," +
-                           to_string(in.pts[ptIdx + 2].y);
-                ptIdx += 3;
-                break;
-            case PathCommand::Close:
-                svgPath += "Z";
-                break;
-            }
-        }
-        printf("SVG Path input: %s\n", svgPath.c_str());
-    }
     for (uint32_t i = 0; i < cmdCnt; i++) {
         switch (cmds[i]) {
             case PathCommand::MoveTo: {
@@ -448,48 +417,12 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 break;
             }
             case PathCommand::Close: {
-                if (tvg::gl::shouldMerge(out.pts[prevPtIdx] * matrix,
-                                         out.pts[startPtIdx] * matrix)) {
-                    out.pts.pop();
-                    out.cmds.pop();
-                }
                 out.cmds.push(PathCommand::Close);
                 hasPrevPrev = false;
                 break;
             }
             default:
                 break;
-            }
-            if (out.pts.count > 1) {
-                string svgPath = "";
-                uint32_t ptIdx = 0;
-                for (uint32_t i = 0; i < out.cmds.count; ++i) {
-                    switch (out.cmds[i]) {
-                    case PathCommand::MoveTo:
-                        svgPath += "M" + to_string(out.pts[ptIdx].x) + "," +
-                                   to_string(out.pts[ptIdx].y);
-                        ptIdx++;
-                        break;
-                    case PathCommand::LineTo:
-                        svgPath += "L" + to_string(out.pts[ptIdx].x) + "," +
-                                   to_string(out.pts[ptIdx].y);
-                        ptIdx++;
-                        break;
-                    case PathCommand::CubicTo:
-                        svgPath += "C" + to_string(out.pts[ptIdx].x) + "," +
-                                   to_string(out.pts[ptIdx].y) + " " +
-                                   to_string(out.pts[ptIdx + 1].x) + "," +
-                                   to_string(out.pts[ptIdx + 1].y) + " " +
-                                   to_string(out.pts[ptIdx + 2].x) + "," +
-                                   to_string(out.pts[ptIdx + 2].y);
-                        ptIdx += 3;
-                        break;
-                    case PathCommand::Close:
-                        svgPath += "Z";
-                        break;
-                    }
-                }
-                printf("SVG Path #%d: %s\n",i, svgPath.c_str());
             }
     }
 }

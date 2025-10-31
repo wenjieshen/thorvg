@@ -1252,7 +1252,7 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     sdata->geometry.matrix = transform;
     sdata->geometry.viewport = vport;
 
-    // TODO: Optmize the path in place after the API change and allow mutable access to the original shape
+    // TODO: After the Interface of RenderMethod can change and allow mutable access to the original shape, remove this and optimize the path in place
     RenderShape optShape;
     bool optimized = flags & (RenderUpdateFlag::Path | RenderUpdateFlag::Transform);
     if (optimized) {
@@ -1269,8 +1269,11 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     if (flags & (RenderUpdateFlag::Color | RenderUpdateFlag::Gradient | RenderUpdateFlag::Transform | RenderUpdateFlag::Path)) {
         if (sdata->rshape->path.pts.count > 2) { // Can be a polygon
             if (sdata->geometry.tesselateShape(*(sdata->rshape))) sdata->validFill = true;
-        } else if (sdata->rshape->path.pts.count == 2 && tvg::zero(sdata->rshape->strokeWidth())) { // Degenerate case: 2 points only
-            sdata->rshape->stroke->width = MIN_GL_STROKE_WIDTH;
+        } else if (sdata->rshape->path.pts.count == 2 && tvg::zero(sdata->rshape->strokeWidth())) {
+            // This case cannot be rendered as a polygon. Render it as a stroke.
+            if (optShape.stroke == nullptr) optShape.stroke = new RenderStroke();
+            sdata->rshape->stroke->width = MIN_GL_STROKE_WIDTH / scaling(transform);
+            sdata->opacity *= 0.5f;
             if (sdata->geometry.tesselateStroke(*(sdata->rshape))){
                 // The time spent is similar to subtituting buffers in tessellation, so we just move the buffers to keep the code simple.
                 sdata->geometry.stroke.index.move(sdata->geometry.fill.index);
