@@ -321,19 +321,48 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 break;
             }
             case PathCommand::CubicTo: {
-                if (tvg::gl::shouldMerge(pts[2] * matrix, out.pts[prevPtIdx] * matrix)) {
+                auto p0 = out.pts[prevPtIdx] * matrix;
+                auto p3 = pts[2] * matrix;
+                if (tvg::gl::shouldMerge(p0, p3)) {
                     pts += 3;
                     break;
                 }
-                
-                out.cmds.push(PathCommand::CubicTo);
-                out.pts.push(pts[0]);
-                out.pts.push(pts[1]);
-                out.pts.push(pts[2]);
+                auto p1 = pts[0] * matrix;
+                auto p2 = pts[1] * matrix;
+                auto v = p3 - p0;
+                auto vv = v.x * v.x + v.y * v.y;
+                auto checkPoint = [&](const Point& p, float& maxDist,
+                                      float& minT, float& maxT) {
+                    Point w = p - p0;
+                    float area = cross(v, w);
+                    float dist = std::fabs(area) / std::sqrt(vv);
+                    if (dist > maxDist) maxDist = dist;
+
+                    float t = dot(w, v) / vv;
+                    if (t < minT) minT = t;
+                    if (t > maxT) maxT = t;
+                };
+                float maxDist = 0.0f;
+                float minT = 1e9f;
+                float maxT = -1e9f;
+
+                checkPoint(p1, maxDist, minT, maxT);
+                checkPoint(p2, maxDist, minT, maxT);
+
+                bool flatEnough  = (maxDist <= 0.5f);
+                bool inSpan = (minT >= -0.25f) && (maxT <= 1.0f + 0.25f);
+                if (flatEnough && inSpan) {
+                    out.cmds.push(PathCommand::LineTo);
+                    out.pts.push(pts[2]);
+                } else {
+                    out.cmds.push(PathCommand::CubicTo);
+                    out.pts.push(pts[0]);
+                    out.pts.push(pts[1]);
+                    out.pts.push(pts[2]);
+                }
                 prevPrevPtIdx = prevPtIdx;
                 prevPtIdx = out.pts.count - 1;
                 hasPrevPrev = true;
-
                 pts += 3;
                 break;
             }
