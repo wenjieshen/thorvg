@@ -333,29 +333,42 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 auto p2 = pts[1] * matrix;
                 auto v = p3 - p0;
                 auto vv = v.x * v.x + v.y * v.y;
-                auto checkPoint = [&](const Point& p, float& maxDist,
-                                      float& minT, float& maxT) {
-                    Point w = p - p0;
-                    float area = cross(v, w);
-                    float dist = std::fabs(area) / std::sqrt(vv);
-                    if (dist > maxDist) maxDist = dist;
-
-                    float t = dot(w, v) / vv;
-                    if (t < minT) minT = t;
-                    if (t > maxT) maxT = t;
-                };
                 float maxDist = 0.0f;
                 float minT = 1e9f;
                 float maxT = -1e9f;
 
-                checkPoint(p1, maxDist, minT, maxT);
-                checkPoint(p2, maxDist, minT, maxT);
+                tvg::gl::checkPointToLine(p1, p0, v, vv, maxDist, minT, maxT);
+                tvg::gl::checkPointToLine(p2, p0, v, vv, maxDist, minT, maxT);
 
                 bool flatEnough  = (maxDist <= 0.5f);
                 bool inSpan = (minT >= -0.25f) && (maxT <= 1.0f + 0.25f);
                 if (flatEnough && inSpan) {
-                    out.cmds.push(PathCommand::LineTo);
-                    out.pts.push(pts[2]);
+                    if (out.pts.count > 1){
+                        maxDist = 0.0f;
+                        minT = 1e9f;
+                        maxT = -1e9f;
+                        auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
+                        v = p0 - prevPrevPt;
+                        vv = v.x * v.x + v.y * v.y;
+                        tvg::gl::checkPointToLine(p3, p0, v, vv, maxDist, minT, maxT);
+                        if (maxDist <= 0.5f) {
+                            if (minT < -0.25f) {
+                                out.pts.pop();
+                                out.pts.push(pts[2]);
+                            } else if (maxT > 1.0f + 0.25f) {
+                                out.pts.pop();
+                                out.pts.pop();
+                                out.pts.push(out.pts[prevPrevPtIdx]);
+                                out.pts.push(pts[2]);
+                            }
+                        } else {
+                            out.cmds.push(PathCommand::LineTo);
+                            out.pts.push(pts[2]);
+                        }
+                    } else {
+                        out.cmds.push(PathCommand::LineTo);
+                        out.pts.push(pts[2]);
+                    }
                 } else {
                     out.cmds.push(PathCommand::CubicTo);
                     out.pts.push(pts[0]);
@@ -369,7 +382,8 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
                 break;
             }
             case PathCommand::Close: {
-                if (tvg::gl::shouldMerge(out.pts[prevPtIdx] * matrix,out.pts[startPtIdx] * matrix)) {
+                if (tvg::gl::shouldMerge(out.pts[prevPtIdx] * matrix,
+                                         out.pts[startPtIdx] * matrix)) {
                     out.pts.pop();
                     out.cmds.pop();
                 }
@@ -380,34 +394,36 @@ void GlGeometry::optimizePath(const RenderPath& in, RenderPath& out)
             default:
                 break;
             }
-    }
-
-   
-
-    if (out.pts.count > 2) {
-        string svgPath = "";
-        uint32_t ptIdx = 0;
-        for (uint32_t i = 0; i < out.cmds.count; ++i) {
-            switch (out.cmds[i]) {
-                case PathCommand::MoveTo:
-                    svgPath += "M" + to_string(out.pts[ptIdx].x) + "," + to_string(out.pts[ptIdx].y);
-                    ptIdx++;
-                    break;
-                case PathCommand::LineTo:
-                    svgPath += "L" + to_string(out.pts[ptIdx].x) + "," + to_string(out.pts[ptIdx].y);
-                    ptIdx++;
-                    break;
-                case PathCommand::CubicTo:
-                    svgPath += "C" + to_string(out.pts[ptIdx].x) + "," + to_string(out.pts[ptIdx].y) + " " +
-                              to_string(out.pts[ptIdx+1].x) + "," + to_string(out.pts[ptIdx+1].y) + " " +
-                              to_string(out.pts[ptIdx+2].x) + "," + to_string(out.pts[ptIdx+2].y);
-                    ptIdx += 3;
-                    break;
-                case PathCommand::Close:
-                    svgPath += "Z";
-                    break;
+            if (out.pts.count > 1) {
+                string svgPath = "";
+                uint32_t ptIdx = 0;
+                for (uint32_t i = 0; i < out.cmds.count; ++i) {
+                    switch (out.cmds[i]) {
+                    case PathCommand::MoveTo:
+                        svgPath += "M" + to_string(out.pts[ptIdx].x) + "," +
+                                   to_string(out.pts[ptIdx].y);
+                        ptIdx++;
+                        break;
+                    case PathCommand::LineTo:
+                        svgPath += "L" + to_string(out.pts[ptIdx].x) + "," +
+                                   to_string(out.pts[ptIdx].y);
+                        ptIdx++;
+                        break;
+                    case PathCommand::CubicTo:
+                        svgPath += "C" + to_string(out.pts[ptIdx].x) + "," +
+                                   to_string(out.pts[ptIdx].y) + " " +
+                                   to_string(out.pts[ptIdx + 1].x) + "," +
+                                   to_string(out.pts[ptIdx + 1].y) + " " +
+                                   to_string(out.pts[ptIdx + 2].x) + "," +
+                                   to_string(out.pts[ptIdx + 2].y);
+                        ptIdx += 3;
+                        break;
+                    case PathCommand::Close:
+                        svgPath += "Z";
+                        break;
+                    }
+                }
+                printf("SVG Path #%d: %s\n",i, svgPath.c_str());
             }
-        }
-        printf("SVG Path: %s\n", svgPath.c_str());
     }
 }

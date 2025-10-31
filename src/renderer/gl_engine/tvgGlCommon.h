@@ -185,6 +185,17 @@ namespace tvg {
             float dy = p1.y - p2.y;
             return (dx * dx + dy * dy) < (GL_PIXEL_TOLERANCE * GL_PIXEL_TOLERANCE);
         }
+
+        inline void checkPointToLine(const Point& p, const Point& p0, const Point& v, float vv, float& maxDist, float& minT, float& maxT) {
+            Point w = p - p0;
+            float area = cross(v, w);
+            float dist = fabsf(area) / std::sqrtf(vv);
+            if (dist > maxDist) maxDist = dist;
+
+            float t = dot(w, v) / vv;
+            if (t < minT) minT = t;
+            if (t > maxT) maxT = t;
+        }
     }
 }
 #endif /* _TVG_GL_COMMON_H_ */
