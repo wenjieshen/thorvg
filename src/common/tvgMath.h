@@ -386,7 +386,7 @@ static inline void log(const Point& pt)
 }
 
 
-static inline bool shouldMergePoints(const Point& p1, const Point& p2, float tolerance = 0.25f)
+static inline bool shouldMergePts(const Point& p1, const Point& p2, float tolerance)
 {
     float dx = p1.x - p2.x;
     float dy = p1.y - p2.y;
@@ -394,7 +394,7 @@ static inline bool shouldMergePoints(const Point& p1, const Point& p2, float tol
 }
 
 
-static inline void checkPointToLine(const Point& p, const Point& p0, const Point& v, const float vv, float& maxDist, float& minT, float& maxT)
+static inline void checkLine(const Point& p, const Point& p0, const Point& v, const float vv, float& maxDist, float& minT, float& maxT)
 {
     Point w = p - p0;
     float area = cross(v, w);
@@ -404,6 +404,33 @@ static inline void checkPointToLine(const Point& p, const Point& p0, const Point
     float t = dot(w, v) / vv;
     if (t < minT) minT = t;
     if (t > maxT) maxT = t;
+}
+
+
+static inline void validateCubic(const Point& p0, const Point& cp1, const Point& cp2, const Point& p3, float& maxDist, float& minT, float& maxT)
+{
+    maxDist = 0.0f;
+    minT = FLT_MAX;
+    maxT = FLT_MIN;
+    auto v = p3 - p0;
+    auto vv = v.x * v.x + v.y * v.y;
+    if (vv < FLOAT_EPSILON) {
+        TVGERR("GEOMETRY", "shouldMergePts did not work. validateCubic received a collapsed cubic.");
+        return;
+    }
+    checkLine(cp1, p0, v, vv, maxDist, minT, maxT);
+    checkLine(cp2, p0, v, vv, maxDist, minT, maxT);
+}
+
+
+static inline void checkLinePts(const Point& p, const Point& p0, const Point& p1, float& dist, float& t)
+{
+    auto v = p1 - p0;
+    auto vv = v.x * v.x + v.y * v.y;
+    Point w = p - p0;
+    float area = cross(v, w);
+    dist = fabsf(area) / std::sqrtf(vv);
+    t = dot(w, v) / vv;
 }
 
 

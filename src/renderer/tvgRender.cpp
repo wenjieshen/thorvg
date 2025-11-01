@@ -105,6 +105,8 @@ bool RenderPath::bounds(const Matrix* m, BBox& box)
 
 void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& matrix)
 {
+    static constexpr auto PX_TOLERANCE = 0.25f;
+
     out.cmds.reserve(in.cmds.count);
     out.pts.reserve(in.pts.count);
 
@@ -114,7 +116,6 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
 
     uint32_t prevPtIdx = 0;
     uint32_t prevPrevPtIdx = 0;
-    uint32_t startPtIdx = 0;
     auto hasPrevPrev = false;
     for (uint32_t i = 0; i < cmdCnt; i++) {
         switch (cmds[i]) {
@@ -122,7 +123,6 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
                 out.cmds.push(PathCommand::MoveTo);
                 out.pts.push(*pts);
                 prevPtIdx = out.pts.count - 1;
-                startPtIdx = prevPtIdx;
                 hasPrevPrev = false;
                 pts++;
                 break;
@@ -130,25 +130,20 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
             case PathCommand::LineTo: {
                 auto p0 = out.pts[prevPtIdx] * matrix;
                 auto p1 = (*pts) * matrix;
-                if (tvg::shouldMergePoints(p0, p1)) {
+                if (tvg::shouldMergePts(p0, p1, PX_TOLERANCE)) {
                     pts++;
                     break;
                 }
 
-                if (out.pts.count > 1) {
+                if (hasPrevPrev && out.pts.count > 1) {
                     auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
-                    auto v = p0 - prevPrevPt;
-                    auto vv = v.x * v.x + v.y * v.y;
-
-                    float minT = 1e9f;
-                    float maxT = -1e9f;
-                    float maxDist = 0.0f;
-                    tvg::checkPointToLine(p1, prevPrevPt, v, vv, maxDist, minT, maxT);
-                    if (maxDist <= 0.5f) {
-                        if (minT < -0.25f) {
+                    float dist, t;
+                    tvg::checkLinePts(p1, prevPrevPt, p0, dist, t);
+                    if (dist <= PX_TOLERANCE) {
+                        if (t < -PX_TOLERANCE) {
                             out.pts.pop();
                             out.pts.push(*pts);
-                        } else if (maxT > 1.0f + 0.25f) {
+                        } else if (t > 1.0f +PX_TOLERANCE) {
                             out.pts.pop();
                             out.pts.pop();
                             out.pts.push(out.pts[prevPrevPtIdx]);
@@ -169,46 +164,35 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
                     hasPrevPrev = true;
                 }
 
-
                 pts++;
                 break;
             }
             case PathCommand::CubicTo: {
                 auto p0 = out.pts[prevPtIdx] * matrix;
                 auto p3 = pts[2] * matrix;
-                if (tvg::shouldMergePoints(p0, p3)) {
+                if (tvg::shouldMergePts(p0, p3, PX_TOLERANCE)) {
                     pts += 3;
                     break;
                 }
                 auto p1 = pts[0] * matrix;
                 auto p2 = pts[1] * matrix;
-                auto v = p3 - p0;
-                auto vv = v.x * v.x + v.y * v.y;
-                float maxDist = 0.0f;
-                float minT = 1e9f;
-                float maxT = -1e9f;
+                float maxDist, minT, maxT;
+                tvg::validateCubic(p0, p1, p2, p3, maxDist, minT, maxT);
 
-                tvg::checkPointToLine(p1, p0, v, vv, maxDist, minT, maxT);
-                tvg::checkPointToLine(p2, p0, v, vv, maxDist, minT, maxT);
-
-                bool flatEnough  = (maxDist <= 0.5f);
-                bool inSpan = (minT >= -0.25f) && (maxT <= 1.0f + 0.25f);
+                bool flatEnough  = (maxDist <= PX_TOLERANCE);
+                bool inSpan = (minT >= -PX_TOLERANCE) && (maxT <= 1.0f + PX_TOLERANCE);
                 if (flatEnough && inSpan) {
-                    if (out.pts.count > 1){
-                        auto maxDist = 0.0f;
-                        auto minT = 1e9f;
-                        auto maxT = -1e9f;
+                    if (hasPrevPrev && out.pts.count > 1){
+                        float dist, t;
                         auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
-                        auto v = p0 - prevPrevPt;
-                        auto vv = v.x * v.x + v.y * v.y;
-                        tvg::checkPointToLine(p3, prevPrevPt, v, vv, maxDist, minT, maxT);
-                        if (maxDist <= 0.5f) {
-                            if (minT < -0.25f) {
+                        tvg::checkLinePts(p3, prevPrevPt, p0, dist, t);
+                        if (dist <= PX_TOLERANCE) {
+                            if (t < -PX_TOLERANCE) {
                                 out.pts.pop();
                                 out.pts.pop();
                                 out.pts.push(pts[2]);
                                 out.pts.push(out.pts[prevPrevPtIdx]);
-                            } else if (maxT > 1.0f + 0.25f) {
+                            } else if (t > 1.0f + PX_TOLERANCE) {
                                 out.pts.pop();
                                 out.pts.push(pts[2]);
                             }
