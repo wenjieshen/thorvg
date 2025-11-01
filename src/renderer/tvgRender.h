@@ -266,6 +266,7 @@ struct RenderPath
     }
 
     bool bounds(const Matrix* m, BBox& box);
+    static void optimize(const RenderPath& in, RenderPath& out, const Matrix& matrix);
 };
 
 struct RenderTrimPath

@@ -1256,7 +1256,7 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     RenderShape optShape;
     bool optimized = flags & (RenderUpdateFlag::Path | RenderUpdateFlag::Transform);
     if (optimized) {
-        sdata->geometry.optimizePath(rshape.path, optShape.path);
+        RenderPath::optimize(rshape.path, optShape.path, sdata->geometry.matrix);
         if (rshape.fill) optShape.fill = rshape.fill;
         if (rshape.stroke) optShape.stroke = rshape.stroke;
         

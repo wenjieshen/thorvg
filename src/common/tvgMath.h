@@ -386,6 +386,27 @@ static inline void log(const Point& pt)
 }
 
 
+static inline bool shouldMergePoints(const Point& p1, const Point& p2, float tolerance = 0.25f)
+{
+    float dx = p1.x - p2.x;
+    float dy = p1.y - p2.y;
+    return (dx * dx + dy * dy) < (tolerance * tolerance);
+}
+
+
+static inline void checkPointToLine(const Point& p, const Point& p0, const Point& v, const float vv, float& maxDist, float& minT, float& maxT)
+{
+    Point w = p - p0;
+    float area = cross(v, w);
+    float dist = fabsf(area) / std::sqrtf(vv);
+    if (dist > maxDist) maxDist = dist;
+
+    float t = dot(w, v) / vv;
+    if (t < minT) minT = t;
+    if (t > maxT) maxT = t;
+}
+
+
 /************************************************************************/
 /* Line functions                                                       */
 /************************************************************************/

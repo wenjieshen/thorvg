@@ -110,7 +110,6 @@ struct GlGeometry
     bool tesselateStroke(const RenderShape& rshape);
     void tesselateImage(const RenderSurface* image);
     bool draw(GlRenderTask* task, GlStageBuffer* gpuBuffer, RenderUpdateFlag flag);
-    void optimizePath(const RenderPath& in, RenderPath& out);
     GlStencilMode getStencilMode(RenderUpdateFlag flag);
     RenderRegion getBounds() const;
 
@@ -176,26 +175,4 @@ struct GlCompositor : RenderCompositor
     GlCompositor(const RenderRegion& box) : bbox(box) {}
 };
 
-
-namespace tvg {
-    namespace gl { // Only be needed in Gl Engine
-        constexpr float GL_PIXEL_TOLERANCE = 0.25f;
-        inline bool shouldMerge(const Point& p1, const Point& p2){
-            float dx = p1.x - p2.x;
-            float dy = p1.y - p2.y;
-            return (dx * dx + dy * dy) < (GL_PIXEL_TOLERANCE * GL_PIXEL_TOLERANCE);
-        }
-
-        inline void checkPointToLine(const Point& p, const Point& p0, const Point& v,const float vv, float& maxDist, float& minT, float& maxT) {
-            Point w = p - p0;
-            float area = cross(v, w);
-            float dist = fabsf(area) / std::sqrtf(vv);
-            if (dist > maxDist) maxDist = dist;
-
-            float t = dot(w, v) / vv;
-            if (t < minT) minT = t;
-            if (t > maxT) maxT = t;
-        }
-    }
-}
 #endif /* _TVG_GL_COMMON_H_ */
