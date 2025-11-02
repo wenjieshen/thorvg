@@ -25,6 +25,126 @@
 #include "tvgGlTessellator.h"
 #include "tvgGlRenderTask.h"
 
+// Optimize path in screen space with merging collinear lines, collapsing zero length lines, and removing unnecessary cubic beziers.
+static void _optimize(const RenderPath& in, RenderPath& out, const Matrix& matrix)
+{
+    static constexpr auto PX_TOLERANCE = 0.25f;
+
+    out.cmds.reserve(in.cmds.count);
+    out.pts.reserve(in.pts.count);
+
+    auto cmds = in.cmds.data;
+    auto cmdCnt = in.cmds.count;
+    auto pts = in.pts.data;
+
+    uint32_t prevIdx = 0;
+    uint32_t prevPrevIdx = 0;
+    auto hasPrevPrev = false;
+
+    // The suffix "T" indicates that the point is transformed.
+    Point lastOutT;
+    Point prevOutT;
+
+    bool isIdentity = tvg::identity(&matrix);
+
+    auto addLineCmd = [&](const Point& pt, const Point& ptT) {
+        out.cmds.push(PathCommand::LineTo);
+        out.pts.push(pt);
+        prevOutT = lastOutT;
+        lastOutT = ptT;
+        prevPrevIdx = prevIdx;
+        prevIdx = out.pts.count - 1;
+        hasPrevPrev = true;
+    };
+
+    auto processLineCollinear = [&](const Point& startT, const Point& pt, const Point& ptT) {
+        if (!hasPrevPrev || out.pts.count <= 1) {
+            addLineCmd(pt, ptT);
+            return;
+        }
+
+        float dist, t;
+        tvg::point2Line(ptT, prevOutT, startT, dist, t);
+
+        if (dist > PX_TOLERANCE) {
+            addLineCmd(pt, ptT);
+            return;
+        }
+
+        if (t < -PX_TOLERANCE) {
+            out.pts[prevPrevIdx] = pt;
+            lastOutT = ptT;
+        } else if (t > 1.0f + PX_TOLERANCE) {
+            out.pts[prevIdx] = pt;
+            lastOutT = ptT;
+        }
+    };
+
+    auto processCubicTo = [&](const Point* cubicPts, const Point& startT) {
+        auto endT = isIdentity ? cubicPts[2] : cubicPts[2] * matrix;
+        if (tvg::closed(startT, endT, PX_TOLERANCE)) {
+            return;
+        }
+        auto ctrl1T = isIdentity ? cubicPts[0] : cubicPts[0] * matrix;
+        auto ctrl2T = isIdentity ? cubicPts[1] : cubicPts[1] * matrix;
+        float maxDist, minT, maxT;
+        tvg::validateCubic(startT, ctrl1T, ctrl2T, endT, maxDist, minT, maxT);
+
+        bool flatEnough  = (maxDist <= PX_TOLERANCE);
+        bool inSpan = (minT >= -PX_TOLERANCE) && (maxT <= 1.0f + PX_TOLERANCE);
+        if (flatEnough && inSpan) {
+            processLineCollinear(startT, cubicPts[2], endT);
+        } else {
+            out.cmds.push(PathCommand::CubicTo);
+            out.pts.push(cubicPts[0]);
+            out.pts.push(cubicPts[1]);
+            out.pts.push(cubicPts[2]);
+            prevOutT = lastOutT;
+            lastOutT = endT;
+            prevPrevIdx = prevIdx;
+            prevIdx = out.pts.count - 1;
+            hasPrevPrev = true;
+        }
+    };
+
+    for (uint32_t i = 0; i < cmdCnt; i++) {
+        switch (cmds[i]) {
+            case PathCommand::MoveTo: {
+                out.cmds.push(PathCommand::MoveTo);
+                out.pts.push(*pts);
+                lastOutT = isIdentity ? *pts : *pts * matrix;
+                prevIdx = out.pts.count - 1;
+                hasPrevPrev = false;
+                pts++;
+                break;
+            }
+            case PathCommand::LineTo: {
+                auto startT = lastOutT;
+                auto ptT = isIdentity ? *pts : (*pts) * matrix;
+                if (tvg::closed(startT, ptT, PX_TOLERANCE)) {
+                    pts++;
+                    break;
+                }
+                processLineCollinear(startT, *pts, ptT);
+                pts++;
+                break;
+            }
+            case PathCommand::CubicTo: {
+                processCubicTo(pts, lastOutT);
+                pts += 3;
+                break;
+            }
+            case PathCommand::Close: {
+                out.cmds.push(PathCommand::Close);
+                hasPrevPrev = false;
+                break;
+            }
+            default:
+                break;
+            }
+    }
+}
+
 bool GlIntersector::isPointInTriangle(const Point& p, const Point& a, const Point& b, const Point& c)
 {
     auto d1 = tvg::cross(p - a, p - b);
@@ -134,22 +254,68 @@ bool GlIntersector::intersectImage(const RenderRegion region, const GlShape* ima
 }
 
 
-bool GlGeometry::tesselateShape(const RenderShape& rshape)
+void GlGeometry::updateOptimizedPath(const RenderPath& path, const Matrix& transform)
+{
+    optimizedPath.cmds.clear();
+    optimizedPath.pts.clear();
+    _optimize(path, optimizedPath, transform);
+    hasOptimizedPath = true;
+}
+
+
+void GlGeometry::prepare(const RenderShape& rshape)
+{
+    updateOptimizedPath(rshape.path, matrix);
+}
+
+
+bool GlGeometry::tesselateShape(const RenderShape& rshape, float* opacityMultiplier)
 {
     fill.clear();
+    const RenderPath& path2Use = hasOptimizedPath ? optimizedPath : rshape.path;
+
+    // When the CTM scales a filled path so small that its device-space
+    // World:  [========]     // normal-sized filled path
+    // After CTM:  [.]        // thinner than 1 px in device space
+    // Handling: two points   // collapse to a 2-point handle for stability
+    if (path2Use.pts.count == 2 && tvg::zero(rshape.strokeWidth())) {
+        if (tesselateLine(path2Use)) {
+            // The time spent is similar to subtituting buffers in tessellation, so we just move the buffers to keep the code simple.
+            stroke.index.move(fill.index);
+            stroke.vertex.move(fill.vertex);
+            if (opacityMultiplier) *opacityMultiplier = MIN_GL_STROKE_ALPHA;
+            fillRule = rshape.rule;
+            return true;
+        }
+        return false;
+    }
+
+    // Handle normal shapes with more than 2 points
     BWTessellator bwTess{&fill};
+
     if (rshape.trimpath()) {
         RenderPath trimmedPath;
-        if (rshape.stroke->trim.trim(rshape.path, trimmedPath)) {
+        if (rshape.stroke->trim.trim(path2Use, trimmedPath)) {
             bwTess.tessellate(trimmedPath, matrix);
         }
     } else {
-        bwTess.tessellate(rshape.path, matrix);
+        bwTess.tessellate(path2Use, matrix);
     }
 
     fillRule = rshape.rule;
     bounds = bwTess.bounds();
+    if (opacityMultiplier) *opacityMultiplier = 1.0f;
+    return true;
+}
 
+
+bool GlGeometry::tesselateLine(const RenderPath& path)
+{
+    stroke.clear();
+    if (path.pts.count != 2) return false;
+    Stroker stroker(&stroke, MIN_GL_STROKE_WIDTH / scaling(matrix), StrokeCap::Butt, StrokeJoin::Bevel);
+    stroker.run(path, matrix);
+    bounds = stroker.bounds();
     return true;
 }
 
@@ -167,8 +333,9 @@ bool GlGeometry::tesselateStroke(const RenderShape& rshape)
     }
     //run stroking only if it's valid
     if (!tvg::zero(strokeWidth)) {
-        Stroker stroker(&stroke, strokeWidth);
-        stroker.run(rshape, matrix);
+        const RenderPath& pathToUse = hasOptimizedPath ? optimizedPath : rshape.path;
+        Stroker stroker(&stroke, strokeWidth, rshape.strokeCap(), rshape.strokeJoin());
+        stroker.run(rshape, pathToUse, matrix);
         bounds = stroker.bounds();
         return true;
     }

@@ -393,6 +393,50 @@ static inline void log(const Point& pt)
 }
 
 
+static inline bool closed(const Point& lhs, const Point& rhs, float tolerance)
+{
+    float dx = lhs.x - rhs.x;
+    float dy = lhs.y - rhs.y;
+    return (dx * dx + dy * dy) < (tolerance * tolerance);
+}
+
+
+static inline void point2Line(const Point& point, const Point& start, const Point& vec, const float vecLenSq, float& maxDist, float& minT, float& maxT)
+{
+    Point offset = point - start;
+    auto area = cross(vec, offset);
+    auto dist = fabsf(area) / sqrtf(vecLenSq); // if lineVecLenSq == 0, mean closed() hasn't been called
+    if (dist > maxDist) maxDist = dist;
+
+    auto t = dot(offset, vec) / vecLenSq;
+    if (t < minT) minT = t;
+    if (t > maxT) maxT = t;
+}
+
+
+static inline void validateCubic(const Point& start, const Point& ctrl1, const Point& ctrl2, const Point& end, float& maxDist, float& minT, float& maxT)
+{
+    maxDist = 0.0f;
+    minT = FLT_MAX;
+    maxT = FLT_MIN;
+    auto vec = end - start;
+    auto vecLenSq = vec.x * vec.x + vec.y * vec.y;
+    point2Line(ctrl1, start, vec, vecLenSq, maxDist, minT, maxT);
+    point2Line(ctrl2, start, vec, vecLenSq, maxDist, minT, maxT);
+}
+
+
+static inline void point2Line(const Point& point, const Point& start, const Point& end, float& dist, float& t)
+{
+    auto vec = end - start;
+    auto vecLenSq = vec.x * vec.x + vec.y * vec.y;
+    Point offset = point - start;
+    auto area = cross(vec, offset);
+    dist = fabsf(area) / sqrtf(vecLenSq); // if lineVecLenSq == 0, mean closed() hasn't been called
+    t = dot(offset, vec) / vecLenSq;
+}
+
+
 /************************************************************************/
 /* Line functions                                                       */
 /************************************************************************/
