@@ -117,58 +117,67 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
     uint32_t prevPtIdx = 0;
     uint32_t prevPrevPtIdx = 0;
     auto hasPrevPrev = false;
+
+    Point lastOutPtTransformed;
+    Point prevOutPtTransformed;
+
+    auto addLineCmd = [&](const Point& pt, const Point& ptTransformed) {
+        out.cmds.push(PathCommand::LineTo);
+        out.pts.push(pt);
+        prevOutPtTransformed = lastOutPtTransformed;
+        lastOutPtTransformed = ptTransformed;
+        prevPrevPtIdx = prevPtIdx;
+        prevPtIdx = out.pts.count - 1;
+        hasPrevPrev = true;
+    };
+
+    auto processLineCollinear = [&](const Point& p0Transformed, const Point& p1, const Point& p1Transformed) {
+        if (!hasPrevPrev || out.pts.count <= 1) {
+            addLineCmd(p1, p1Transformed);
+            return;
+        }
+
+        float dist, t;
+        tvg::checkLinePts(p1Transformed, prevOutPtTransformed, p0Transformed, dist, t);
+
+        if (dist > PX_TOLERANCE) {
+            addLineCmd(p1, p1Transformed);
+            return;
+        }
+
+        if (t < -PX_TOLERANCE) {
+            out.pts[prevPrevPtIdx] = p1;
+            lastOutPtTransformed = p1Transformed;
+        } else if (t > 1.0f + PX_TOLERANCE) {
+            out.pts[prevPtIdx] = p1;
+            lastOutPtTransformed = p1Transformed;
+        }
+    };
+
     for (uint32_t i = 0; i < cmdCnt; i++) {
         switch (cmds[i]) {
             case PathCommand::MoveTo: {
                 out.cmds.push(PathCommand::MoveTo);
                 out.pts.push(*pts);
+                lastOutPtTransformed = *pts * matrix;
                 prevPtIdx = out.pts.count - 1;
                 hasPrevPrev = false;
                 pts++;
                 break;
             }
             case PathCommand::LineTo: {
-                auto p0 = out.pts[prevPtIdx] * matrix;
+                auto p0 = lastOutPtTransformed;
                 auto p1 = (*pts) * matrix;
                 if (tvg::shouldMergePts(p0, p1, PX_TOLERANCE)) {
                     pts++;
                     break;
                 }
-
-                if (hasPrevPrev && out.pts.count > 1) {
-                    auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
-                    float dist, t;
-                    tvg::checkLinePts(p1, prevPrevPt, p0, dist, t);
-                    if (dist <= PX_TOLERANCE) {
-                        if (t < -PX_TOLERANCE) {
-                            out.pts.pop();
-                            out.pts.push(*pts);
-                        } else if (t > 1.0f +PX_TOLERANCE) {
-                            out.pts.pop();
-                            out.pts.pop();
-                            out.pts.push(out.pts[prevPrevPtIdx]);
-                            out.pts.push(*pts);
-                        }
-                    }else {
-                        out.cmds.push(PathCommand::LineTo);
-                        out.pts.push(*pts);
-                        prevPrevPtIdx = prevPtIdx;
-                        prevPtIdx = out.pts.count - 1;
-                        hasPrevPrev = true;
-                    }
-                } else {
-                    out.cmds.push(PathCommand::LineTo);
-                    out.pts.push(*pts);
-                    prevPrevPtIdx = prevPtIdx;
-                    prevPtIdx = out.pts.count - 1;
-                    hasPrevPrev = true;
-                }
-
+                processLineCollinear(p0, *pts, p1);
                 pts++;
                 break;
             }
             case PathCommand::CubicTo: {
-                auto p0 = out.pts[prevPtIdx] * matrix;
+                auto p0 = lastOutPtTransformed;
                 auto p3 = pts[2] * matrix;
                 if (tvg::shouldMergePts(p0, p3, PX_TOLERANCE)) {
                     pts += 3;
@@ -182,36 +191,14 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
                 bool flatEnough  = (maxDist <= PX_TOLERANCE);
                 bool inSpan = (minT >= -PX_TOLERANCE) && (maxT <= 1.0f + PX_TOLERANCE);
                 if (flatEnough && inSpan) {
-                    if (hasPrevPrev && out.pts.count > 1){
-                        float dist, t;
-                        auto prevPrevPt = out.pts[prevPrevPtIdx] * matrix;
-                        tvg::checkLinePts(p3, prevPrevPt, p0, dist, t);
-                        if (dist <= PX_TOLERANCE) {
-                            if (t < -PX_TOLERANCE) {
-                                out.pts.pop();
-                                out.pts.pop();
-                                out.pts.push(pts[2]);
-                                out.pts.push(out.pts[prevPrevPtIdx]);
-                            } else if (t > 1.0f + PX_TOLERANCE) {
-                                out.pts.pop();
-                                out.pts.push(pts[2]);
-                            }
-                        } else {
-                            out.cmds.push(PathCommand::LineTo);
-                            out.pts.push(pts[2]);
-                        }
-                    } else {
-                        out.cmds.push(PathCommand::LineTo);
-                        out.pts.push(pts[2]);
-                        prevPrevPtIdx = prevPtIdx;
-                        prevPtIdx = out.pts.count - 1;
-                        hasPrevPrev = true;
-                    }
+                    processLineCollinear(p0, pts[2], p3);
                 } else {
                     out.cmds.push(PathCommand::CubicTo);
                     out.pts.push(pts[0]);
                     out.pts.push(pts[1]);
                     out.pts.push(pts[2]);
+                    prevOutPtTransformed = lastOutPtTransformed;
+                    lastOutPtTransformed = p3;
                     prevPrevPtIdx = prevPtIdx;
                     prevPtIdx = out.pts.count - 1;
                     hasPrevPrev = true;

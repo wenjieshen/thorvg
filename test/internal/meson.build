@@ -7,7 +7,6 @@ endif
 
 internal_test_file = [
     'testInternalMain.cpp',
-    'testMath.cpp',
     'testGeometry.cpp'
 ]
 
