@@ -154,6 +154,33 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
         }
     };
 
+    auto processCubicTo = [&](const Point* cubicPts, const Point& p0T) {
+        auto p3T = cubicPts[2] * matrix;
+        if (tvg::shouldMergePts(p0T, p3T, PX_TOLERANCE)) {
+            return;
+        }
+        auto p1T = cubicPts[0] * matrix;
+        auto p2T = cubicPts[1] * matrix;
+        float maxDist, minT, maxT;
+        tvg::validateCubic(p0T, p1T, p2T, p3T, maxDist, minT, maxT);
+
+        bool flatEnough  = (maxDist <= PX_TOLERANCE);
+        bool inSpan = (minT >= -PX_TOLERANCE) && (maxT <= 1.0f + PX_TOLERANCE);
+        if (flatEnough && inSpan) {
+            processLineCollinear(p0T, cubicPts[2], p3T);
+        } else {
+            out.cmds.push(PathCommand::CubicTo);
+            out.pts.push(cubicPts[0]);
+            out.pts.push(cubicPts[1]);
+            out.pts.push(cubicPts[2]);
+            prevOutPtT = lastOutPtT;
+            lastOutPtT = p3T;
+            prevPrevPtIdx = prevPtIdx;
+            prevPtIdx = out.pts.count - 1;
+            hasPrevPrev = true;
+        }
+    };
+
     for (uint32_t i = 0; i < cmdCnt; i++) {
         switch (cmds[i]) {
             case PathCommand::MoveTo: {
@@ -177,33 +204,7 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
                 break;
             }
             case PathCommand::CubicTo: {
-                auto p0T = lastOutPtT;
-                auto p3T = pts[2] * matrix;
-                if (tvg::shouldMergePts(p0T, p3T, PX_TOLERANCE)) {
-                    pts += 3;
-                    break;
-                }
-                auto p1T = pts[0] * matrix;
-                auto p2T = pts[1] * matrix;
-                float maxDist, minT, maxT;
-                tvg::validateCubic(p0T, p1T, p2T, p3T, maxDist, minT, maxT);
-
-                bool flatEnough  = (maxDist <= PX_TOLERANCE);
-                bool inSpan = (minT >= -PX_TOLERANCE) && (maxT <= 1.0f + PX_TOLERANCE);
-                if (flatEnough && inSpan) {
-                    processLineCollinear(p0T, pts[2], p3T);
-                } else {
-                    out.cmds.push(PathCommand::CubicTo);
-                    out.pts.push(pts[0]);
-                    out.pts.push(pts[1]);
-                    out.pts.push(pts[2]);
-                    prevOutPtT = lastOutPtT;
-                    lastOutPtT = p3T;
-                    prevPrevPtIdx = prevPtIdx;
-                    prevPtIdx = out.pts.count - 1;
-                    hasPrevPrev = true;
-                }
-
+                processCubicTo(pts, lastOutPtT);
                 pts += 3;
                 break;
             }
