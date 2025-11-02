@@ -121,6 +121,8 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
     Point lastOutPtT;
     Point prevOutPtT;
 
+    bool isIdentity = tvg::identity(&matrix);
+
     auto addLineCmd = [&](const Point& pt, const Point& ptT) {
         out.cmds.push(PathCommand::LineTo);
         out.pts.push(pt);
@@ -155,12 +157,12 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
     };
 
     auto processCubicTo = [&](const Point* cubicPts, const Point& p0T) {
-        auto p3T = cubicPts[2] * matrix;
+        auto p3T = isIdentity ? cubicPts[2] : cubicPts[2] * matrix;
         if (tvg::shouldMergePts(p0T, p3T, PX_TOLERANCE)) {
             return;
         }
-        auto p1T = cubicPts[0] * matrix;
-        auto p2T = cubicPts[1] * matrix;
+        auto p1T = isIdentity ? cubicPts[0] : cubicPts[0] * matrix;
+        auto p2T = isIdentity ? cubicPts[1] : cubicPts[1] * matrix;
         float maxDist, minT, maxT;
         tvg::validateCubic(p0T, p1T, p2T, p3T, maxDist, minT, maxT);
 
@@ -186,7 +188,7 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
             case PathCommand::MoveTo: {
                 out.cmds.push(PathCommand::MoveTo);
                 out.pts.push(*pts);
-                lastOutPtT = *pts * matrix;
+                lastOutPtT = isIdentity ? *pts : *pts * matrix;
                 prevPtIdx = out.pts.count - 1;
                 hasPrevPrev = false;
                 pts++;
@@ -194,7 +196,7 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
             }
             case PathCommand::LineTo: {
                 auto p0T = lastOutPtT;
-                auto p1T = (*pts) * matrix;
+                auto p1T = isIdentity ? *pts : (*pts) * matrix;
                 if (tvg::shouldMergePts(p0T, p1T, PX_TOLERANCE)) {
                     pts++;
                     break;
