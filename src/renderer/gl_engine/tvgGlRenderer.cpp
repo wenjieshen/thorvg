@@ -1252,35 +1252,20 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     sdata->geometry.matrix = transform;
     sdata->geometry.viewport = vport;
 
-    // TODO: After the Interface of RenderMethod can change and allow mutable access to the original shape, remove this and optimize the path in place
-    RenderShape optShape;
-    bool optimized = flags & (RenderUpdateFlag::Path | RenderUpdateFlag::Transform);
-    if (optimized) {
-        RenderPath::optimize(rshape.path, optShape.path, sdata->geometry.matrix);
-        if (rshape.fill) optShape.fill = rshape.fill;
-        if (rshape.stroke) optShape.stroke = rshape.stroke;
-        
-        optShape.rule = rshape.rule;
-        optShape.color = rshape.color;
-        sdata->rshape = &optShape;
-    }
-
     //TODO: Please precisely update tessellation not to update only if the color is changed.
     if (flags & (RenderUpdateFlag::Color | RenderUpdateFlag::Gradient | RenderUpdateFlag::Transform | RenderUpdateFlag::Path)) {
-        if (sdata->rshape->path.pts.count > 2) { // Can be a polygon
-            if (sdata->geometry.tesselateShape(*(sdata->rshape))) sdata->validFill = true;
-        } else if (sdata->rshape->path.pts.count == 2 && tvg::zero(sdata->rshape->strokeWidth())) {
-            // This case cannot be rendered as a polygon. Render it as a stroke.
-            if (optShape.stroke == nullptr) optShape.stroke = new RenderStroke();
-            sdata->rshape->stroke->width = MIN_GL_STROKE_WIDTH / scaling(transform);
-            sdata->opacity *= 0.5f;
-            if (sdata->geometry.tesselateStroke(*(sdata->rshape))){
+        RenderPath optPath;
+        RenderPath::optimize(rshape.path, optPath, transform);
+        if (optPath.pts.count > 2) {
+            if (sdata->geometry.tesselateShape(*(sdata->rshape), optPath)) sdata->validFill = true;
+        } else if (optPath.pts.count == 2 && tvg::zero(sdata->rshape->strokeWidth())) {
+            if (sdata->geometry.tesselateLineOnly(optPath)){
                 // The time spent is similar to subtituting buffers in tessellation, so we just move the buffers to keep the code simple.
                 sdata->geometry.stroke.index.move(sdata->geometry.fill.index);
                 sdata->geometry.stroke.vertex.move(sdata->geometry.fill.vertex);
+                sdata->opacity *= MIN_GL_STROKE_ALPHA;
                 sdata->validFill = true;
             }
-            sdata->rshape->stroke->width = 0.0f; // Prevent from corrupting the original shape
         }
     }
 
@@ -1292,12 +1277,6 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     if (flags & RenderUpdateFlag::Clip) {
         sdata->clips.clear();
         sdata->clips.push(clips);
-    }
-    
-    if (optimized) {
-        optShape.fill = nullptr;
-        optShape.stroke = nullptr;
-        sdata->rshape = &rshape; // Restore the original shape
     }
     
     return sdata;

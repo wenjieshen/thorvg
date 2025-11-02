@@ -136,17 +136,17 @@ bool GlIntersector::intersectImage(const RenderRegion region, const GlShape* ima
 }
 
 
-bool GlGeometry::tesselateShape(const RenderShape& rshape)
+bool GlGeometry::tesselateShape(const RenderShape& rshape, const RenderPath& path)
 {
     fill.clear();
     BWTessellator bwTess{&fill};
     if (rshape.trimpath()) {
         RenderPath trimmedPath;
-        if (rshape.stroke->trim.trim(rshape.path, trimmedPath)) {
+        if (rshape.stroke->trim.trim(path, trimmedPath)) {
             bwTess.tessellate(trimmedPath, matrix);
         }
     } else {
-        bwTess.tessellate(rshape.path, matrix);
+        bwTess.tessellate(path, matrix);
     }
 
     fillRule = rshape.rule;
@@ -155,6 +155,14 @@ bool GlGeometry::tesselateShape(const RenderShape& rshape)
     return true;
 }
 
+bool GlGeometry::tesselateLineOnly(const RenderPath& path){
+    stroke.clear();
+    if (path.pts.count != 2) return false;
+    Stroker stroker(&stroke, MIN_GL_STROKE_WIDTH / scaling(matrix));
+    stroker.run(path, matrix);
+    bounds = stroker.bounds();
+    return true;
+}
 
 bool GlGeometry::tesselateStroke(const RenderShape& rshape)
 {

@@ -40,10 +40,11 @@ class Stroker
 public:
     Stroker(GlGeometryBuffer* buffer, float strokeWidth);
     void run(const RenderShape& rshape, const Matrix& m);
+    void run(const RenderPath& path, const Matrix& m);
     RenderRegion bounds() const;
 
 private:
-    void run(const RenderPath& path, const Matrix& m);
+    
 
     float radius() const
     {
