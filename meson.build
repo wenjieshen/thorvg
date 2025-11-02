@@ -169,6 +169,7 @@ endif
 
 if get_option('tests')
    subdir('test')
+   subdir('test/internal')
 endif
 
 summary(

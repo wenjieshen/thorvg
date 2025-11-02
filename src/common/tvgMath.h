@@ -398,7 +398,7 @@ static inline void checkLine(const Point& p, const Point& p0, const Point& v, co
 {
     Point w = p - p0;
     float area = cross(v, w);
-    float dist = fabsf(area) / std::sqrtf(vv);
+    float dist = fabsf(area) / sqrtf(vv);
     if (dist > maxDist) maxDist = dist;
 
     float t = dot(w, v) / vv;
@@ -429,7 +429,7 @@ static inline void checkLinePts(const Point& p, const Point& p0, const Point& p1
     auto vv = v.x * v.x + v.y * v.y;
     Point w = p - p0;
     float area = cross(v, w);
-    dist = fabsf(area) / std::sqrtf(vv);
+    dist = fabsf(area) / sqrtf(vv);
     t = dot(w, v) / vv;
 }
 
