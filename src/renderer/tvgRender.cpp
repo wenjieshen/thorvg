@@ -118,39 +118,39 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
     uint32_t prevPrevPtIdx = 0;
     auto hasPrevPrev = false;
 
-    Point lastOutPtTransformed;
-    Point prevOutPtTransformed;
+    Point lastOutPtT;
+    Point prevOutPtT;
 
-    auto addLineCmd = [&](const Point& pt, const Point& ptTransformed) {
+    auto addLineCmd = [&](const Point& pt, const Point& ptT) {
         out.cmds.push(PathCommand::LineTo);
         out.pts.push(pt);
-        prevOutPtTransformed = lastOutPtTransformed;
-        lastOutPtTransformed = ptTransformed;
+        prevOutPtT = lastOutPtT;
+        lastOutPtT = ptT;
         prevPrevPtIdx = prevPtIdx;
         prevPtIdx = out.pts.count - 1;
         hasPrevPrev = true;
     };
 
-    auto processLineCollinear = [&](const Point& p0Transformed, const Point& p1, const Point& p1Transformed) {
+    auto processLineCollinear = [&](const Point& p0T, const Point& p1, const Point& p1T) {
         if (!hasPrevPrev || out.pts.count <= 1) {
-            addLineCmd(p1, p1Transformed);
+            addLineCmd(p1, p1T);
             return;
         }
 
         float dist, t;
-        tvg::checkLinePts(p1Transformed, prevOutPtTransformed, p0Transformed, dist, t);
+        tvg::checkLinePts(p1T, prevOutPtT, p0T, dist, t);
 
         if (dist > PX_TOLERANCE) {
-            addLineCmd(p1, p1Transformed);
+            addLineCmd(p1, p1T);
             return;
         }
 
         if (t < -PX_TOLERANCE) {
             out.pts[prevPrevPtIdx] = p1;
-            lastOutPtTransformed = p1Transformed;
+            lastOutPtT = p1T;
         } else if (t > 1.0f + PX_TOLERANCE) {
             out.pts[prevPtIdx] = p1;
-            lastOutPtTransformed = p1Transformed;
+            lastOutPtT = p1T;
         }
     };
 
@@ -159,46 +159,46 @@ void RenderPath::optimize(const RenderPath& in, RenderPath& out, const Matrix& m
             case PathCommand::MoveTo: {
                 out.cmds.push(PathCommand::MoveTo);
                 out.pts.push(*pts);
-                lastOutPtTransformed = *pts * matrix;
+                lastOutPtT = *pts * matrix;
                 prevPtIdx = out.pts.count - 1;
                 hasPrevPrev = false;
                 pts++;
                 break;
             }
             case PathCommand::LineTo: {
-                auto p0 = lastOutPtTransformed;
-                auto p1 = (*pts) * matrix;
-                if (tvg::shouldMergePts(p0, p1, PX_TOLERANCE)) {
+                auto p0T = lastOutPtT;
+                auto p1T = (*pts) * matrix;
+                if (tvg::shouldMergePts(p0T, p1T, PX_TOLERANCE)) {
                     pts++;
                     break;
                 }
-                processLineCollinear(p0, *pts, p1);
+                processLineCollinear(p0T, *pts, p1T);
                 pts++;
                 break;
             }
             case PathCommand::CubicTo: {
-                auto p0 = lastOutPtTransformed;
-                auto p3 = pts[2] * matrix;
-                if (tvg::shouldMergePts(p0, p3, PX_TOLERANCE)) {
+                auto p0T = lastOutPtT;
+                auto p3T = pts[2] * matrix;
+                if (tvg::shouldMergePts(p0T, p3T, PX_TOLERANCE)) {
                     pts += 3;
                     break;
                 }
-                auto p1 = pts[0] * matrix;
-                auto p2 = pts[1] * matrix;
+                auto p1T = pts[0] * matrix;
+                auto p2T = pts[1] * matrix;
                 float maxDist, minT, maxT;
-                tvg::validateCubic(p0, p1, p2, p3, maxDist, minT, maxT);
+                tvg::validateCubic(p0T, p1T, p2T, p3T, maxDist, minT, maxT);
 
                 bool flatEnough  = (maxDist <= PX_TOLERANCE);
                 bool inSpan = (minT >= -PX_TOLERANCE) && (maxT <= 1.0f + PX_TOLERANCE);
                 if (flatEnough && inSpan) {
-                    processLineCollinear(p0, pts[2], p3);
+                    processLineCollinear(p0T, pts[2], p3T);
                 } else {
                     out.cmds.push(PathCommand::CubicTo);
                     out.pts.push(pts[0]);
                     out.pts.push(pts[1]);
                     out.pts.push(pts[2]);
-                    prevOutPtTransformed = lastOutPtTransformed;
-                    lastOutPtTransformed = p3;
+                    prevOutPtT = lastOutPtT;
+                    lastOutPtT = p3T;
                     prevPrevPtIdx = prevPtIdx;
                     prevPtIdx = out.pts.count - 1;
                     hasPrevPrev = true;
