@@ -34,7 +34,8 @@ uint32_t GlProgram::mCurrentProgram = 0;
 /* External Class Implementation                                        */
 /************************************************************************/
 
-GlProgram::GlProgram(const char* vertSrc, const char* fragSrc)
+GlProgram::GlProgram(const char* vertSrc, const char* fragSrc, uint8_t renderType)
+    : mRenderType(renderType)
 {
 
 #ifndef __EMSCRIPTEN__
@@ -122,6 +123,12 @@ int32_t GlProgram::getUniformBlockIndex(const char* name)
 uint32_t GlProgram::getProgramId()
 {
     return mProgramObj;
+}
+
+
+uint8_t GlProgram::getRenderType()
+{
+    return mRenderType;
 }
 
 void GlProgram::setUniform1Value(int32_t location, int count, const int* values)

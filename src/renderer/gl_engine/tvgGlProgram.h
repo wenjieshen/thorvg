@@ -28,7 +28,7 @@
 class GlProgram
 {
 public:
-    GlProgram(const char* vertSrc, const char* fragSrc);
+    GlProgram(const char* vertSrc, const char* fragSrc, uint8_t renderType);
     ~GlProgram();
 
     void load();
@@ -37,6 +37,7 @@ public:
     int32_t getUniformLocation(const char* name);
     int32_t getUniformBlockIndex(const char* name);
     uint32_t getProgramId();
+    uint8_t getRenderType();
     void setUniform1Value(int32_t location, int count, const int* values);
     void setUniform2Value(int32_t location, int count, const int* values);
     void setUniform3Value(int32_t location, int count, const int* values);
@@ -49,6 +50,7 @@ public:
 
 private:
     uint32_t mProgramObj;
+    uint8_t mRenderType;
     static uint32_t mCurrentProgram;
 };
 
