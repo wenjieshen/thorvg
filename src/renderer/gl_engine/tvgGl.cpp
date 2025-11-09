@@ -863,6 +863,9 @@ bool glInit()
 
 bool glTerm()
 {
+
+    GlShaderCache::cleanup();
+
 #if defined(_WIN32) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
     if (_libGL) FreeLibrary(_libGL);
 #else

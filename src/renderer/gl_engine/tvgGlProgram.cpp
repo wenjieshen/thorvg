@@ -39,7 +39,7 @@ GlProgram::GlProgram(const char* vertSrc, const char* fragSrc, uint8_t renderTyp
 {
 
 #ifndef __EMSCRIPTEN__
-    mProgramObj = GlShaderCache::read(vertSrc, fragSrc);
+    mProgramObj = GlShaderCache::read(renderType);
     if (mProgramObj) return;
 #endif
 
@@ -74,7 +74,7 @@ GlProgram::GlProgram(const char* vertSrc, const char* fragSrc, uint8_t renderTyp
     }
     mProgramObj = progObj;
 #ifndef __EMSCRIPTEN__
-    GlShaderCache::write(progObj, vertSrc, fragSrc);
+    GlShaderCache::write(progObj, renderType);
 #endif
 }
 

@@ -24,12 +24,14 @@
 #define _TVG_GL_SHADER_CACHE_H_
 
 #include "tvgGlCommon.h"
+#include <unordered_map>
+
 
 struct GlShaderCache
 {
-    static void write(uint32_t progObj, const char* vertSrc, const char* fragSrc);
-    static uint32_t read(const char* vertSrc, const char* fragSrc);
-    static bool path(const char* vertSrc, const char* fragSrc, char* outPath, size_t outPathSize);
+    static void write(uint32_t progObj, uint8_t renderType);
+    static uint32_t read(uint8_t renderType);
+    static void cleanup();
     static bool support;
 };
 
