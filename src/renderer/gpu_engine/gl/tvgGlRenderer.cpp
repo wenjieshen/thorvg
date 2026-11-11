@@ -184,7 +184,7 @@ void GlRenderer::initShaders()
     mPrograms.reserve((int)RT_None);
 
 #if 1  //for optimization
-    #define LINEAR_TOTAL_LENGTH 2819
+    #define LINEAR_TOTAL_LENGTH 2820
     #define RADIAL_TOTAL_LENGTH 5301
     #define CONIC_TOTAL_LENGTH 3072
     #define BLEND_TOTAL_LENGTH 7567
@@ -224,7 +224,7 @@ void GlRenderer::initShaders()
     );
 
     mPrograms.push(new GlProgram(COLOR_VERT_SHADER, COLOR_FRAG_SHADER));
-    mPrograms.push(new GlProgram(GRADIENT_VERT_SHADER, linearGradientFragShader));
+    mPrograms.push(new GlProgram(LINEAR_GRADIENT_VERT_SHADER, linearGradientFragShader));
     mPrograms.push(new GlProgram(GRADIENT_VERT_SHADER, radialGradientFragShader));
     mPrograms.push(new GlProgram(GRADIENT_VERT_SHADER, conicGradientFragShader));
     mPrograms.push(new GlProgram(IMAGE_VERT_SHADER, IMAGE_FRAG_SHADER));
@@ -439,7 +439,7 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
     inverse(&fill->transform(), &inv);
     if (!(flag & RenderUpdateFlag::GradientStroke)) {
         // World-space meshes need inverse model before gradient lookup. Local
-        // gradient strokes already pass local positions to TransformInfo.
+        // gradient strokes already pass local positions to the shader.
         Matrix invShape;
         inverse(&shape.geometry.matrix, &invShape);
         inv = inv * invShape;
@@ -447,17 +447,16 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
     if (conic) inv = tvg::gpuConicTransform({x, y}, angle) * inv;
     getMatrix3Std140(inv, invMat3);
 
-    float transformInfo[GL_MAT3_STD140_SIZE];
-    memcpy(transformInfo, invMat3, GL_MAT3_STD140_BYTES);
-    auto transformOffset = mGpuBuffer.push(transformInfo, sizeof(transformInfo), true);
-
-    task->addBindResource(GlBindingResource{
-        0,
-        GlShaderUniformBlock::TransformInfo,
-        mGpuBuffer.getBufferId(),
-        transformOffset,
-        sizeof(transformInfo),
-    });
+    // Linear gradients share one block across both shader stages.
+    if (type != Type::LinearGradient) {
+        task->addBindResource(GlBindingResource{
+            0,
+            GlShaderUniformBlock::TransformInfo,
+            mGpuBuffer.getBufferId(),
+            mGpuBuffer.push(invMat3, sizeof(invMat3), true),
+            sizeof(invMat3),
+        });
+    }
 
     auto alpha = shape.opacity / 255.f;
 
@@ -485,6 +484,7 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
         gradientBlock.startPos[1] = y1;
         gradientBlock.stopPos[0] = x2;
         gradientBlock.stopPos[1] = y2;
+        memcpy(gradientBlock.invTransform, invMat3, sizeof(invMat3));
 
         gradientBinding = GlBindingResource{
             2,
@@ -526,7 +526,7 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
 
     task->addBindResource(gradientBinding);
 
-    // TransformInfo uses slot 0 and GradientInfo uses slot 2, so BlendRegion moves to 3.
+    // GradientInfo uses slot 2; radial/conic TransformInfo also uses slot 0.
     bindBlendTarget(task, dstCopyFbo, viewRegion, 3);
 
     auto stencilMode = shape.geometry.stencilMode(flag);
@@ -712,6 +712,7 @@ GlProgram* GlRenderer::getBlendProgram(BlendMethod method, BlendSource source)
                      shaderFunc[methodInd]);
             break;
         case BlendSource::LinearGradient:
+            vertShader = LINEAR_GRADIENT_VERT_SHADER;
             snprintf(fragShader, BLEND_TOTAL_LENGTH, "%s%s%s%s%s%s%s%s",
                      STR_GRADIENT_FRAG_COMMON_VARIABLES,
                      STR_LINEAR_GRADIENT_VARIABLES,

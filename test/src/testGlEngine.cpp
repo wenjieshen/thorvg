@@ -30,6 +30,29 @@ using namespace std;
 
 #if defined(THORVG_GL_TEST_SUPPORT)
 
+#if !defined(__APPLE__)
+#if defined(THORVG_GL_TARGET_GLES)
+#include <GLES3/gl3.h>
+#else
+#include <GL/gl.h>
+#endif
+#endif
+
+static void checkGlPixel(const TestGLEngine& engine, uint32_t x, uint32_t y, uint8_t r, uint8_t g, uint8_t b)
+{
+#if defined(__APPLE__)
+    glBindFramebuffer(GL_FRAMEBUFFER, engine.fbo);
+#endif
+    uint8_t pixel[4] = {};
+    glReadPixels(x, engine.height - y - 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    REQUIRE(glGetError() == GL_NO_ERROR);
+    INFO("Pixel at ", x, ", ", y);
+    CHECK(int(pixel[0]) == Approx(r).margin(2));
+    CHECK(int(pixel[1]) == Approx(g).margin(2));
+    CHECK(int(pixel[2]) == Approx(b).margin(2));
+    CHECK(int(pixel[3]) == Approx(255).margin(1));
+}
+
 TEST_CASE("GL Basic draw", "[tvgGlEngine]")
 {
     TestGLEngine engine;
@@ -655,6 +678,109 @@ TEST_CASE("GL Stroke Update", "[tvgGlEngine]")
         REQUIRE(line->strokeCap(StrokeCap::Square) == Result::Success);
         render();
         REQUIRE(line->intersects(17, 80) == true);
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
+TEST_CASE("GL Linear Gradient Uniforms", "[tvgGlEngine]")
+{
+    TestGLEngine engine;
+
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        auto canvas = unique_ptr<GlCanvas>(GlCanvas::gen());
+        REQUIRE(canvas);
+        engine.target(canvas.get());
+
+        auto background = Shape::gen();
+        REQUIRE(background->appendRect(0, 0, 100, 100) == Result::Success);
+        REQUIRE(background->fill(128, 128, 128) == Result::Success);
+        REQUIRE(canvas->add(background) == Result::Success);
+
+        auto gradient = []() {
+            auto fill = LinearGradient::gen();
+            REQUIRE(fill->linear(0, 0, 30, 0) == Result::Success);
+            Fill::ColorStop stops[16];
+            for (uint32_t i = 0; i < 16; ++i) {
+                stops[i] = {i / 15.0f, uint8_t(i < 8 ? 255 : 0), 0, uint8_t(i < 8 ? 0 : 255), 255};
+            }
+            REQUIRE(fill->colorStops(stops, 16) == Result::Success);
+            REQUIRE(fill->transform({1.5f, 0, 10, 0, 1, 0, 0, 0, 1}) == Result::Success);
+            return fill;
+        };
+
+        // Fill meshes use world positions, while stroke meshes use local positions.
+        auto rect = Shape::gen();
+        REQUIRE(rect->appendRect(0, 0, 60, 20) == Result::Success);
+        REQUIRE(rect->fill(gradient()) == Result::Success);
+        REQUIRE(rect->translate(20, 10) == Result::Success);
+        REQUIRE(canvas->add(rect) == Result::Success);
+
+        auto line = Shape::gen();
+        REQUIRE(line->moveTo(0, 0) == Result::Success);
+        REQUIRE(line->lineTo(60, 0) == Result::Success);
+        REQUIRE(line->strokeWidth(12) == Result::Success);
+        REQUIRE(line->strokeFill(gradient()) == Result::Success);
+        REQUIRE(line->transform({0, -1, 30, 1, 0, 35, 0, 0, 1}) == Result::Success);
+        REQUIRE(canvas->add(line) == Result::Success);
+
+        // Exercise both the native and custom blend programs with the same block.
+        for (auto method : {BlendMethod::Normal, BlendMethod::Multiply}) {
+            REQUIRE(rect->blend(method) == Result::Success);
+            REQUIRE(line->blend(method) == Result::Success);
+            REQUIRE(canvas->update() == Result::Success);
+            REQUIRE(canvas->draw(true) == Result::Success);
+            REQUIRE(canvas->sync() == Result::Success);
+
+            auto channel = uint8_t(method == BlendMethod::Normal ? 255 : 128);
+            checkGlPixel(engine, 25, 20, channel, 0, 0);
+            checkGlPixel(engine, 77, 20, 0, 0, channel);
+            checkGlPixel(engine, 30, 40, channel, 0, 0);
+            checkGlPixel(engine, 30, 92, 0, 0, channel);
+        }
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
+TEST_CASE("GL Image Opacity Uniform Lifetime", "[tvgGlEngine]")
+{
+    TestGLEngine engine;
+
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        auto canvas = unique_ptr<GlCanvas>(GlCanvas::gen());
+        REQUIRE(canvas);
+        engine.target(canvas.get());
+
+        auto background = Shape::gen();
+        REQUIRE(background->appendRect(0, 0, 100, 100) == Result::Success);
+        REQUIRE(background->fill(0, 0, 0) == Result::Success);
+        REQUIRE(canvas->add(background) == Result::Success);
+
+        uint32_t white = 0xffffffff;
+        Picture* images[4];
+        for (uint32_t i = 0; i < 4; ++i) {
+            images[i] = Picture::gen();
+            REQUIRE(images[i]->load(&white, 1, 1, ColorSpace::ABGR8888, true) == Result::Success);
+            REQUIRE(images[i]->size(16, 16) == Result::Success);
+            REQUIRE(images[i]->translate(5.0f + i * 24.0f, 40) == Result::Success);
+            REQUIRE(canvas->add(images[i]) == Result::Success);
+        }
+
+        // Repeated values share a record within a frame. Reorder them after each
+        // upload so retaining offsets into the previous staging contents fails.
+        const uint8_t opacities[][4] = {{64, 192, 64, 255}, {255, 64, 192, 64}, {192, 255, 64, 192}};
+        for (const auto& frame : opacities) {
+            for (uint32_t i = 0; i < 4; ++i) {
+                REQUIRE(images[i]->opacity(frame[i]) == Result::Success);
+            }
+            REQUIRE(canvas->update() == Result::Success);
+            REQUIRE(canvas->draw(true) == Result::Success);
+            REQUIRE(canvas->sync() == Result::Success);
+            for (uint32_t i = 0; i < 4; ++i) {
+                checkGlPixel(engine, 12 + i * 24, 48, frame[i], frame[i], frame[i]);
+            }
+        }
     }
     REQUIRE(Initializer::term() == Result::Success);
 }

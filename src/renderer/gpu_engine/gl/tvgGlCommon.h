@@ -24,6 +24,7 @@
 #define _TVG_GL_COMMON_H_
 
 #include <cassert>
+#include <cstddef>
 #include "tvgGl.h"
 #include "tvgRender.h"
 #include "tvgMath.h"
@@ -181,7 +182,16 @@ struct GlLinearGradientBlock
     alignas(8) float stopPos[2] = {};
     alignas(8) float stopPoints[MAX_GRADIENT_STOPS] = {};
     alignas(16) float stopColors[4 * MAX_GRADIENT_STOPS] = {};
+    alignas(16) float invTransform[GL_MAT3_STD140_SIZE] = {};
 };
+
+// Keep the shared vertex/fragment GradientInfo block in std140 layout.
+static_assert(offsetof(GlLinearGradientBlock, startPos) == 16, "Invalid gradient start offset");
+static_assert(offsetof(GlLinearGradientBlock, stopPos) == 24, "Invalid gradient end offset");
+static_assert(offsetof(GlLinearGradientBlock, stopPoints) == 32, "Invalid gradient stop offset");
+static_assert(offsetof(GlLinearGradientBlock, stopColors) == 96, "Invalid gradient color offset");
+static_assert(offsetof(GlLinearGradientBlock, invTransform) == 352, "Invalid gradient matrix offset");
+static_assert(sizeof(GlLinearGradientBlock) == 400, "Invalid gradient block size");
 
 struct GlRadialGradientBlock
 {

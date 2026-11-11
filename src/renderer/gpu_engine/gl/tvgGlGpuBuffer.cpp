@@ -66,6 +66,7 @@ GlGpuBuffer::~GlGpuBuffer()
 
 GlStageBuffer::GlStageBuffer() : mVao(0), mGpuBuffer(), mGpuAuxBuffer(), mGpuIndexBuffer()
 {
+    memset(mImageOpacityOffsets, 0xff, sizeof(mImageOpacityOffsets));
     GL_CHECK(glGenVertexArrays(1, &mVao));
 }
 
@@ -100,6 +101,16 @@ uint32_t GlStageBuffer::pushIndex(void* data, uint32_t size)
     void* dst = nullptr;
     auto offset = reserveIndex(size, &dst);
     if (size > 0) memcpy(dst, data, size);
+    return offset;
+}
+
+uint32_t GlStageBuffer::pushImageOpacity(uint8_t opacity)
+{
+    auto& offset = mImageOpacityOffsets[opacity];
+    if (offset == UINT32_MAX) {
+        uint32_t info[4] = {opacity, 0, 0, 0};
+        offset = push(info, sizeof(info), true);
+    }
     return offset;
 }
 
@@ -146,6 +157,9 @@ uint32_t GlStageBuffer::reserveIndex(uint32_t size, void** dst)
 
 bool GlStageBuffer::flushToGPU(GlStateCache& state)
 {
+    // Offsets can only be shared until the staged data is uploaded or discarded.
+    memset(mImageOpacityOffsets, 0xff, sizeof(mImageOpacityOffsets));
+
     if ((mStageBuffer.empty() && mAuxBuffer.empty()) || mIndexBuffer.empty()) {
         mStageBuffer.clear();
         mAuxBuffer.clear();
