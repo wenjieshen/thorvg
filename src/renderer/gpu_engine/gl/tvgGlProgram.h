@@ -44,7 +44,6 @@ enum class GlShaderUniformBlock : uint8_t
     DropShadow,
     Params,
     BlendRegion,
-    TransformInfo,
     GradientInfo,
     ColorInfo,
     Count,

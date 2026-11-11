@@ -200,14 +200,28 @@ struct GlRadialGradientBlock
     alignas(16) float radius[2] = {};
     alignas(16) float stopPoints[MAX_GRADIENT_STOPS] = {};
     alignas(16) float stopColors[4 * MAX_GRADIENT_STOPS] = {};
+    alignas(16) float invTransform[GL_MAT3_STD140_SIZE] = {};
 };
+
+static_assert(offsetof(GlRadialGradientBlock, centerPos) == 16, "Invalid gradient center offset");
+static_assert(offsetof(GlRadialGradientBlock, radius) == 32, "Invalid gradient radius offset");
+static_assert(offsetof(GlRadialGradientBlock, stopPoints) == 48, "Invalid gradient stop offset");
+static_assert(offsetof(GlRadialGradientBlock, stopColors) == 112, "Invalid gradient color offset");
+static_assert(offsetof(GlRadialGradientBlock, invTransform) == 368, "Invalid gradient matrix offset");
+static_assert(sizeof(GlRadialGradientBlock) == 416, "Invalid gradient block size");
 
 struct GlConicGradientBlock
 {
     alignas(16) float nStops[4] = {};
     alignas(16) float stopPoints[MAX_GRADIENT_STOPS] = {};
     alignas(16) float stopColors[4 * MAX_GRADIENT_STOPS] = {};
+    alignas(16) float invTransform[GL_MAT3_STD140_SIZE] = {};
 };
+
+static_assert(offsetof(GlConicGradientBlock, stopPoints) == 16, "Invalid gradient stop offset");
+static_assert(offsetof(GlConicGradientBlock, stopColors) == 80, "Invalid gradient color offset");
+static_assert(offsetof(GlConicGradientBlock, invTransform) == 336, "Invalid gradient matrix offset");
+static_assert(sizeof(GlConicGradientBlock) == 384, "Invalid gradient block size");
 
 struct GlCompositor : RenderCompositor
 {

@@ -186,7 +186,7 @@ void GlRenderer::initShaders()
 #if 1  //for optimization
     #define LINEAR_TOTAL_LENGTH 2820
     #define RADIAL_TOTAL_LENGTH 5301
-    #define CONIC_TOTAL_LENGTH 3072
+    #define CONIC_TOTAL_LENGTH 3069
     #define BLEND_TOTAL_LENGTH 7567
 #else
     #define COMMON_TOTAL_LENGTH strlen(STR_GRADIENT_FRAG_COMMON_VARIABLES) + strlen(STR_GRADIENT_FRAG_COMMON_FUNCTIONS) + 1
@@ -225,8 +225,8 @@ void GlRenderer::initShaders()
 
     mPrograms.push(new GlProgram(COLOR_VERT_SHADER, COLOR_FRAG_SHADER));
     mPrograms.push(new GlProgram(LINEAR_GRADIENT_VERT_SHADER, linearGradientFragShader));
-    mPrograms.push(new GlProgram(GRADIENT_VERT_SHADER, radialGradientFragShader));
-    mPrograms.push(new GlProgram(GRADIENT_VERT_SHADER, conicGradientFragShader));
+    mPrograms.push(new GlProgram(RADIAL_GRADIENT_VERT_SHADER, radialGradientFragShader));
+    mPrograms.push(new GlProgram(CONIC_GRADIENT_VERT_SHADER, conicGradientFragShader));
     mPrograms.push(new GlProgram(IMAGE_VERT_SHADER, IMAGE_FRAG_SHADER));
 
     // compose Renderer
@@ -447,17 +447,6 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
     if (conic) inv = tvg::gpuConicTransform({x, y}, angle) * inv;
     getMatrix3Std140(inv, invMat3);
 
-    // Linear gradients share one block across both shader stages.
-    if (type != Type::LinearGradient) {
-        task->addBindResource(GlBindingResource{
-            0,
-            GlShaderUniformBlock::TransformInfo,
-            mGpuBuffer.getBufferId(),
-            mGpuBuffer.push(invMat3, sizeof(invMat3), true),
-            sizeof(invMat3),
-        });
-    }
-
     auto alpha = shape.opacity / 255.f;
 
     if (flag & RenderUpdateFlag::GradientStroke) {
@@ -503,6 +492,7 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
         gradientBlock.centerPos[3] = y;
         gradientBlock.radius[0] = fr;
         gradientBlock.radius[1] = r;
+        memcpy(gradientBlock.invTransform, invMat3, sizeof(invMat3));
 
         gradientBinding = GlBindingResource{
             2,
@@ -514,6 +504,7 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
     } else {
         GlConicGradientBlock gradientBlock;
         opaque = _packGradientBlock(gradientBlock.nStops, gradientBlock.stopPoints, gradientBlock.stopColors, stops, stopCnt, FillSpread::Pad, alpha);
+        memcpy(gradientBlock.invTransform, invMat3, sizeof(invMat3));
 
         gradientBinding = GlBindingResource{
             2,
@@ -526,7 +517,7 @@ void GlRenderer::drawPrimitive(GlShape& shape, const Fill* fill, RenderUpdateFla
 
     task->addBindResource(gradientBinding);
 
-    // GradientInfo uses slot 2; radial/conic TransformInfo also uses slot 0.
+    // GradientInfo uses slot 2, so keep BlendRegion on slot 3.
     bindBlendTarget(task, dstCopyFbo, viewRegion, 3);
 
     auto stencilMode = shape.geometry.stencilMode(flag);
@@ -702,7 +693,7 @@ GlProgram* GlRenderer::getBlendProgram(BlendMethod method, BlendSource source)
         return mPrograms[shaderInd];
     }
 
-    vertShader = (source == BlendSource::Solid) ? COLOR_VERT_SHADER : GRADIENT_VERT_SHADER;
+    vertShader = COLOR_VERT_SHADER;
     switch (source) {
         case BlendSource::Solid:
             snprintf(fragShader, BLEND_TOTAL_LENGTH, "%s%s%s%s",
@@ -724,6 +715,7 @@ GlProgram* GlRenderer::getBlendProgram(BlendMethod method, BlendSource source)
                      shaderFunc[methodInd]);
             break;
         case BlendSource::RadialGradient:
+            vertShader = RADIAL_GRADIENT_VERT_SHADER;
             snprintf(fragShader, BLEND_TOTAL_LENGTH, "%s%s%s%s%s%s%s%s",
                      STR_GRADIENT_FRAG_COMMON_VARIABLES,
                      STR_RADIAL_GRADIENT_VARIABLES,
@@ -735,6 +727,7 @@ GlProgram* GlRenderer::getBlendProgram(BlendMethod method, BlendSource source)
                      shaderFunc[methodInd]);
             break;
         case BlendSource::ConicGradient:
+            vertShader = CONIC_GRADIENT_VERT_SHADER;
             snprintf(fragShader, BLEND_TOTAL_LENGTH, "%s%s%s%s%s%s%s%s",
                      STR_GRADIENT_FRAG_COMMON_VARIABLES,
                      STR_CONIC_GRADIENT_VARIABLES,

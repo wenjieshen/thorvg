@@ -25,8 +25,9 @@
 
 extern const char* COLOR_VERT_SHADER;
 extern const char* COLOR_FRAG_SHADER;
-extern const char* GRADIENT_VERT_SHADER;
 extern const char* LINEAR_GRADIENT_VERT_SHADER;
+extern const char* RADIAL_GRADIENT_VERT_SHADER;
+extern const char* CONIC_GRADIENT_VERT_SHADER;
 extern const char* STR_GRADIENT_FRAG_COMMON_VARIABLES;
 extern const char* STR_GRADIENT_FRAG_COMMON_FUNCTIONS;
 extern const char* STR_GRADIENT_MAIN;

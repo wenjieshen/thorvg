@@ -41,7 +41,6 @@ static const char* const UNIFORM_BLOCK_NAMES[] = {
     "DropShadow",
     "Params",
     "BlendRegion",
-    "TransformInfo",
     "GradientInfo",
     "ColorInfo",
 };

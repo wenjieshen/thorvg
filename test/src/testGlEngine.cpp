@@ -742,6 +742,148 @@ TEST_CASE("GL Linear Gradient Uniforms", "[tvgGlEngine]")
     REQUIRE(Initializer::term() == Result::Success);
 }
 
+TEST_CASE("GL Radial Gradient Uniforms", "[tvgGlEngine]")
+{
+    TestGLEngine engine;
+
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        auto canvas = unique_ptr<GlCanvas>(GlCanvas::gen());
+        REQUIRE(canvas);
+        engine.target(canvas.get());
+
+        auto background = Shape::gen();
+        REQUIRE(background->appendRect(0, 0, 100, 100) == Result::Success);
+        REQUIRE(background->fill(128, 128, 128) == Result::Success);
+        REQUIRE(canvas->add(background) == Result::Success);
+
+        auto gradient = [](float y) {
+            auto fill = RadialGradient::gen();
+            REQUIRE(fill->radial(0, 0, 16, 0, 0, 0) == Result::Success);
+            Fill::ColorStop stops[16];
+            for (uint32_t i = 0; i < 16; ++i) {
+                stops[i] = {i / 15.0f, uint8_t(i < 8 ? 255 : 0), 0, uint8_t(i < 8 ? 0 : 255), 255};
+            }
+            REQUIRE(fill->colorStops(stops, 16) == Result::Success);
+            REQUIRE(fill->transform({1.2f, 0, 30, 0, 1, y, 0, 0, 1}) == Result::Success);
+            return fill;
+        };
+
+        auto fill = gradient(10);
+        auto rect = Shape::gen();
+        REQUIRE(rect->appendRect(0, 0, 60, 20) == Result::Success);
+        REQUIRE(rect->fill(fill) == Result::Success);
+        REQUIRE(rect->translate(20, 10) == Result::Success);
+        REQUIRE(canvas->add(rect) == Result::Success);
+
+        auto stroke = gradient(0);
+        auto line = Shape::gen();
+        REQUIRE(line->moveTo(0, 0) == Result::Success);
+        REQUIRE(line->lineTo(60, 0) == Result::Success);
+        REQUIRE(line->strokeWidth(12) == Result::Success);
+        REQUIRE(line->strokeFill(stroke) == Result::Success);
+        REQUIRE(line->transform({0, -1, 30, 1, 0, 35, 0, 0, 1}) == Result::Success);
+        REQUIRE(canvas->add(line) == Result::Success);
+
+        // These samples are blue for a point focus, red inside a larger focal
+        // circle, and split red/blue when that circle moves toward the right.
+        const float focal[][2] = {{0, 0}, {0, 8}, {6, 3}};
+        for (auto method : {BlendMethod::Normal, BlendMethod::Multiply}) {
+            REQUIRE(rect->blend(method) == Result::Success);
+            REQUIRE(line->blend(method) == Result::Success);
+            auto channel = uint8_t(method == BlendMethod::Normal ? 255 : 128);
+            for (uint32_t frame = 0; frame < 3; ++frame) {
+                REQUIRE(fill->radial(0, 0, 16, focal[frame][0], 0, focal[frame][1]) == Result::Success);
+                REQUIRE(stroke->radial(0, 0, 16, focal[frame][0], 0, focal[frame][1]) == Result::Success);
+                REQUIRE(canvas->update() == Result::Success);
+                REQUIRE(canvas->draw(true) == Result::Success);
+                REQUIRE(canvas->sync() == Result::Success);
+
+                auto leftRed = frame == 1;
+                auto rightRed = frame != 0;
+                checkGlPixel(engine, 37, 20, leftRed ? channel : 0, 0, leftRed ? 0 : channel);
+                checkGlPixel(engine, 62, 20, rightRed ? channel : 0, 0, rightRed ? 0 : channel);
+                checkGlPixel(engine, 30, 52, leftRed ? channel : 0, 0, leftRed ? 0 : channel);
+                checkGlPixel(engine, 30, 77, rightRed ? channel : 0, 0, rightRed ? 0 : channel);
+            }
+        }
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
+TEST_CASE("GL Conic Gradient Uniforms", "[tvgGlEngine]")
+{
+    TestGLEngine engine;
+
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        auto canvas = unique_ptr<GlCanvas>(GlCanvas::gen());
+        REQUIRE(canvas);
+        engine.target(canvas.get());
+
+        auto background = Shape::gen();
+        REQUIRE(background->appendRect(0, 0, 100, 100) == Result::Success);
+        REQUIRE(background->fill(128, 128, 128) == Result::Success);
+        REQUIRE(canvas->add(background) == Result::Success);
+
+        auto gradient = []() {
+            auto fill = ConicGradient::gen();
+            REQUIRE(fill->conic(0, 0, 0) == Result::Success);
+            const Fill::ColorStop stops[] = {
+                {0, 255, 0, 0, 255}, {0.20f, 255, 0, 0, 255},
+                {0.30f, 0, 255, 0, 255}, {0.45f, 0, 255, 0, 255},
+                {0.55f, 0, 0, 255, 255}, {0.70f, 0, 0, 255, 255},
+                {0.80f, 255, 255, 0, 255}, {1, 255, 255, 0, 255}
+            };
+            REQUIRE(fill->colorStops(stops, 8) == Result::Success);
+            REQUIRE(fill->transform({1.25f, 0, 20, 0, 0.8f, 20, 0, 0, 1}) == Result::Success);
+            return fill;
+        };
+
+        auto fill = gradient();
+        auto rect = Shape::gen();
+        REQUIRE(rect->appendRect(0, 0, 40, 40) == Result::Success);
+        REQUIRE(rect->fill(fill) == Result::Success);
+        REQUIRE(rect->translate(10, 10) == Result::Success);
+        REQUIRE(canvas->add(rect) == Result::Success);
+
+        auto stroke = gradient();
+        auto outline = Shape::gen();
+        REQUIRE(outline->appendRect(0, 0, 40, 40) == Result::Success);
+        REQUIRE(outline->fill(0, 0, 0, 0) == Result::Success);
+        REQUIRE(outline->strokeWidth(8) == Result::Success);
+        REQUIRE(outline->strokeFill(stroke) == Result::Success);
+        REQUIRE(outline->transform({0, -1, 90, 1, 0, 10, 0, 0, 1}) == Result::Success);
+        REQUIRE(canvas->add(outline) == Result::Success);
+
+        // Visit all four angular quadrants in both world-space fills and local
+        // strokes, then rotate the start angle between successive uploads.
+        const uint32_t fillPixels[][2] = {{40, 36}, {20, 36}, {20, 24}, {40, 24}};
+        const uint32_t strokePixels[][2] = {{50, 49}, {50, 10}, {89, 10}, {89, 49}};
+        const uint8_t colors[][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}};
+        for (auto method : {BlendMethod::Normal, BlendMethod::Multiply}) {
+            REQUIRE(rect->blend(method) == Result::Success);
+            REQUIRE(outline->blend(method) == Result::Success);
+            for (uint32_t frame = 0; frame < 2; ++frame) {
+                REQUIRE(fill->conic(0, 0, frame * 90.0f) == Result::Success);
+                REQUIRE(stroke->conic(0, 0, frame * 90.0f) == Result::Success);
+                REQUIRE(canvas->update() == Result::Success);
+                REQUIRE(canvas->draw(true) == Result::Success);
+                REQUIRE(canvas->sync() == Result::Success);
+                for (uint32_t quadrant = 0; quadrant < 4; ++quadrant) {
+                    auto color = colors[(quadrant + 4 - frame) % 4];
+                    auto r = uint8_t(method == BlendMethod::Normal ? color[0] : (color[0] ? 128 : 0));
+                    auto g = uint8_t(method == BlendMethod::Normal ? color[1] : (color[1] ? 128 : 0));
+                    auto b = uint8_t(method == BlendMethod::Normal ? color[2] : (color[2] ? 128 : 0));
+                    checkGlPixel(engine, fillPixels[quadrant][0], fillPixels[quadrant][1], r, g, b);
+                    checkGlPixel(engine, strokePixels[quadrant][0], strokePixels[quadrant][1], r, g, b);
+                }
+            }
+        }
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
 TEST_CASE("GL Image Opacity Uniform Lifetime", "[tvgGlEngine]")
 {
     TestGLEngine engine;
